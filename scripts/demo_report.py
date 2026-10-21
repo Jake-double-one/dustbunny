@@ -28,6 +28,15 @@ FOLDERS = {  # name: (size, last change days ago, first seen as orphan days ago,
     "lost+found": (16 * 1024, 900, None, 900),
 }
 
+PATH_SIZES = {  # referenced paths inside the folders
+    "/opt/appdata/jellyfin/config": int(1.1 * GIB),
+    "/opt/appdata/jellyfin/cache": int(7.2 * GIB),
+    "/opt/appdata/nextcloud/html": int(2.6 * GIB),
+    "/opt/appdata/nextcloud/db": 480 * MIB,
+    "/opt/appdata/paperless/data": 210 * MIB,
+    "/opt/appdata/paperless/media": int(2.1 * GIB),
+}
+
 
 def ref(path: str, state: RefState, owner: str, source: str, kind: str = "bind") -> Reference:
     return Reference(path=path, source=source, kind=kind, state=state, owner=owner)
@@ -65,6 +74,7 @@ def main() -> None:
                 size_bytes=int(size),
                 last_modified=NOW - timedelta(days=changed, hours=3),
                 created=NOW - timedelta(days=created),
+                path_sizes={p: v for p, v in PATH_SIZES.items() if p.startswith(f"{ROOT}/{name}/")},
             )
         )
     sources = [

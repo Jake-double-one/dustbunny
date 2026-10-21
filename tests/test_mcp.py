@@ -82,6 +82,7 @@ def test_handshake_and_tools(env) -> None:  # noqa: F811
         detail = call(client, "get_folder", folder="used")["structuredContent"]
         assert detail["category"] == "active"
         assert detail["used_by"][0]["owner"] == "app"
+        assert detail["used_by"][0]["size_bytes"] == detail["size_bytes"]
 
         missing = call(client, "get_folder", folder="nope")
         assert missing["isError"] and "list_folders" in missing["content"][0]["text"]

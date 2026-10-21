@@ -62,12 +62,55 @@ def test_tree_stats_newest_mtime_and_hardlinks(tmp_path: Path) -> None:
     os.utime(folder, (1_000_000, 1_000_000))
     os.utime(data, (2_000_000_000, 2_000_000_000))
 
-    size, newest, complete = tree_stats(str(folder))
-    assert complete
-    assert newest == 2_000_000_000
-    single = tree_stats(str(folder / "sub"))[0]
+    stats = tree_stats(str(folder))
+    assert stats.complete
+    assert stats.newest == 2_000_000_000
+    single = tree_stats(str(folder / "sub")).size
     # The hard-linked file is counted only once.
-    assert size < single + 50_000
+    assert stats.size < single + 50_000
+
+
+def test_tree_stats_measures_requested_parts(tmp_path: Path) -> None:
+    (tmp_path / "config" / "cache").mkdir(parents=True)
+    (tmp_path / "config" / "cache" / "big").write_bytes(b"c" * 200_000)
+    (tmp_path / "config" / "settings.xml").write_bytes(b"s" * 20_000)
+    (tmp_path / "other").mkdir()
+    (tmp_path / "other" / "x").write_bytes(b"o" * 80_000)
+    parts = [f"{tmp_path}/config", f"{tmp_path}/config/cache", f"{tmp_path}/config/settings.xml"]
+
+    stats = tree_stats(str(tmp_path), [*parts, f"{tmp_path}/missing"])
+    cache = tree_stats(str(tmp_path / "config" / "cache")).size
+    config = tree_stats(str(tmp_path / "config")).size
+    assert stats.parts[f"{tmp_path}/config/cache"] == cache
+    assert stats.parts[f"{tmp_path}/config"] == config  # nested parts count in both
+    assert 20_000 <= stats.parts[f"{tmp_path}/config/settings.xml"] < 40_000
+    assert f"{tmp_path}/missing" not in stats.parts
+    assert stats.size > config + 80_000
+
+
+def test_discover_measures_tracked_paths(tmp_path: Path) -> None:
+    make_tree(tmp_path)
+    tracked = {f"{tmp_path}/app/config", f"{tmp_path}/link/config/db", "/elsewhere/x"}
+    (app, empty, link) = discover([str(tmp_path)], tracked=tracked).candidates
+    # a path through the symlink is measured in the folder it points to, as the
+    # matcher reads it there
+    assert set(app.path_sizes) == {f"{tmp_path}/app/config", f"{tmp_path}/app/config/db"}
+    assert app.path_sizes[f"{tmp_path}/app/config"] >= 10_000
+    assert empty.path_sizes == {} and link.path_sizes == {}
+    unmeasured = discover([str(tmp_path)], with_stats=False, tracked=tracked).candidates
+    assert unmeasured[0].path_sizes == {}
+
+
+def test_discover_measures_paths_of_a_symlinked_root(tmp_path: Path) -> None:
+    real = tmp_path / "real"
+    (real / "sonarr" / "config").mkdir(parents=True)
+    (real / "sonarr" / "config" / "db").write_bytes(b"d" * 30_000)
+    alias = tmp_path / "alias"
+    alias.symlink_to(real)
+    tracked = {f"{real}/sonarr/config", f"{alias}/sonarr/config"}
+    (candidate,) = discover([str(alias)], tracked=tracked).candidates
+    assert candidate.path_sizes[f"{real}/sonarr/config"] >= 30_000
+    assert candidate.path_sizes[f"{alias}/sonarr/config"] >= 30_000
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root can read everything")
@@ -76,7 +119,7 @@ def test_tree_stats_unreadable_is_incomplete(tmp_path: Path) -> None:
     locked.mkdir()
     locked.chmod(0)
     try:
-        assert tree_stats(str(tmp_path))[2] is False
+        assert tree_stats(str(tmp_path)).complete is False
     finally:
         locked.chmod(0o755)
 
