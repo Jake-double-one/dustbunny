@@ -1,7 +1,8 @@
 # Design
 
-The web UI uses the **Feierabend** design system unchanged: same tokens, the
-same two fonts and the same building blocks. The tokens are in
+The web UI uses the **Feierabend** design system by the project's author
+([Jake-double-one/design-systems](https://github.com/Jake-double-one/design-systems))
+unchanged: same tokens, the same two fonts and the same building blocks. The tokens are in
 `web/static/tokens.css`. Only the *meaning* of the colours is mapped to
 Dustbunny.
 
