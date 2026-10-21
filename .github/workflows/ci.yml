@@ -49,9 +49,10 @@ jobs:
           curl -fsS http://127.0.0.1:18080/ | grep -q 'id="skin-list"'
           docker rm -f smoke
 
+  # pull requests build the image too (without pushing), so updates of the docker/* actions
+  # are tested before they reach main
   image:
     needs: test
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -102,7 +103,7 @@ jobs:
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
