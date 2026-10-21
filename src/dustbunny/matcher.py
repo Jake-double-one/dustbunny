@@ -288,7 +288,7 @@ def sanity_warnings(
         if references and not any(is_under(path, r) for path in literal for r in names):
             warnings.append(warning("root-unreferenced", root=root))
     for ref in references:
-        if ref.glob is None:
+        if ref.glob is None or ref.alternative:
             continue
         prepared = _prepare(ref, aliases, links)
         if any(p.fullmatch(normalize(c.path)) for p in prepared.prefixes for c in candidates):
