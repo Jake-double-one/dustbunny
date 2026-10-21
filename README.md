@@ -63,6 +63,17 @@ dustbunny --once --root /opt/appdata --compose /opt/stacks/media/compose.yaml
 dustbunny --once --json --root /opt/appdata --references refs.json > report.json
 ```
 
+## Web UI (prototype)
+
+`web/` holds the dashboard. Until the API exists, it falls back to demo data:
+
+```sh
+cd web && python -m http.server 8000   # open http://localhost:8000
+python scripts/demo_report.py > web/demo/report.json   # regenerate demo data
+```
+
+Design: see [docs/design.md](docs/design.md).
+
 ## Configuration
 
 | Variable                    | Default  | Description                                         |
@@ -93,7 +104,7 @@ Not all of them are wired up yet – see the roadmap.
 3. Docker socket collector
 4. Portainer collector
 5. State (first seen, diff) + notifications
-6. Web UI + API
+6. Web UI + API (UI prototype with demo data ✅)
 7. Docker image, compose example, release workflow
 8. Quarantine / delete (opt-in)
 

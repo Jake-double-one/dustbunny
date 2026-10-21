@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="auto">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dustbunny</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='55' r='34' fill='%23D9920B'/></svg>">
+<link rel="stylesheet" href="static/tokens.css">
+<link rel="stylesheet" href="static/app.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">Dust<span>bunny</span></div>
+    <div class="switch" role="group" data-i18n-label="language">
+      <button type="button" data-lang-set="de">DE</button>
+      <button type="button" data-lang-set="en">EN</button>
+    </div>
+    <div class="switch" role="group" data-i18n-label="theme">
+      <button type="button" data-theme-set="auto" data-i18n="themeAuto"></button>
+      <button type="button" data-theme-set="light" data-i18n="themeLight"></button>
+      <button type="button" data-theme-set="dark" data-i18n="themeDark"></button>
+    </div>
+  </header>
+
+  <main id="app" aria-live="polite"></main>
+
+  <footer data-i18n="footer"></footer>
+</div>
+<script src="static/app.js"></script>
+</body>
+</html>
