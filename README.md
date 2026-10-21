@@ -88,6 +88,8 @@ In both cases there are no notifications, and "orphaned for … days" doesn't ch
 ## Install with Docker / Portainer
 
 The image is published for `amd64` and `arm64`: `ghcr.io/jake-double-one/dustbunny:latest`.
+`latest` is the newest release, `0.3.1` or `0.3` pin a version, `main` follows the development branch
+(its version shows as e.g. `0.3.1+1a2b3c4` at the bottom of the page).
 
 **Portainer:** *Stacks → Add stack → Web editor*, paste [`docker-compose.yml`](docker-compose.yml), adjust
 the lines marked with `←`, *Deploy the stack*. Or choose *Repository* with

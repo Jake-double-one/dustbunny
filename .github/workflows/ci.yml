@@ -61,16 +61,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref || github.ref }}
-          fetch-depth: 0 # tags, for the version name of main builds
       - name: Build info
         id: info
         env:
           INPUT_REF: ${{ inputs.ref }}
         run: |
+          # the version in pyproject.toml is the one truth; a release tag must match it
+          own="$(sed -n 's/^version = "\(.*\)"$/\1/p' pyproject.toml)"
           if [ -n "$INPUT_REF" ]; then v="$INPUT_REF"
-          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then v="$GITHUB_REF_NAME"
-          # main: the last release plus how far ahead, e.g. v0.1.0 or v0.1.0-3-g1a2b3c4
-          else v="$(git describe --tags --match 'v*' 2>/dev/null || echo "0.0.0-$(git rev-parse --short HEAD)")"; fi
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            v="${GITHUB_REF_NAME#v}"
+            if [ "$v" != "$own" ]; then
+              echo "::error::tag $GITHUB_REF_NAME does not match version $own in pyproject.toml"; exit 1
+            fi
+          # main and pull requests: the version plus the commit, e.g. 0.3.1+1a2b3c4
+          else v="$own+$(git rev-parse --short HEAD)"; fi
           echo "version=${v#v}" >> "$GITHUB_OUTPUT"
           # a branch name like feature/x is no valid image tag
           echo "ref_tag=$(echo "$INPUT_REF" | tr '/' '-')" >> "$GITHUB_OUTPUT"
@@ -84,9 +89,11 @@ jobs:
         with:
           images: ${{ steps.name.outputs.image }}
           flavor: latest=false
-          # main → latest + sha-…; tag v0.1.0 → 0.1.0, 0.1 and the tag itself; manual run → the given ref
+          # tag v0.1.0 (a release) → latest, 0.1.0, 0.1 and the tag itself; main → main + sha-…;
+          # manual run → the given ref
           tags: |
-            type=raw,value=latest,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            type=raw,value=main,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
             type=sha,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
             type=semver,pattern={{version}},enable=${{ startsWith(github.ref, 'refs/tags/') }}
             type=semver,pattern={{major}}.{{minor}},enable=${{ startsWith(github.ref, 'refs/tags/') }}
