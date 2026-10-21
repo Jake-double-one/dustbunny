@@ -1,0 +1,36 @@
+name: extras-project
+
+x-common: &common
+  restart: unless-stopped
+  env_file:
+    - ./common.env
+
+include:
+  - ./other/compose.yaml
+  - path: /opt/stacks/shared/compose.yaml
+    env_file: /opt/stacks/shared/.env
+
+services:
+  web:
+    build:
+      context: ./build
+      dockerfile: Dockerfile
+    env_file:
+      - path: /opt/appdata/web/web.env
+        required: false
+    volumes: !reset []
+  worker:
+    <<: *common
+    build: https://github.com/example/worker.git
+    extends:
+      file: ./base.yml
+      service: base
+    secrets:
+      - db_password
+
+configs:
+  nginx_conf:
+    file: /opt/appdata/nginx/nginx.conf
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt

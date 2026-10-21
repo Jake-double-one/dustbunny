@@ -1,0 +1,6 @@
+services:
+  broken:
+    image: example
+    volumes:
+      - /opt/appdata/broken:/config
+     - this line is mis-indented: [

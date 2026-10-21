@@ -1,0 +1,8 @@
+{
+  "references": [
+    {"path": "/opt/appdata/sonarr", "state": "running", "owner": "sonarr", "kind": "bind"},
+    {"path": "/opt/appdata/radarr/config", "state": "stopped", "owner": "radarr", "kind": "bind"},
+    {"path": "/opt/appdata/old-stack", "state": "defined", "owner": "old-stack", "kind": "bind"},
+    {"path": "/opt/appdata", "state": "running", "owner": "duplicati", "kind": "bind"}
+  ]
+}

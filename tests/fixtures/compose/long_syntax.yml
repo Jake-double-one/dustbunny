@@ -1,0 +1,18 @@
+services:
+  app:
+    image: example/app
+    volumes:
+      - type: bind
+        source: /opt/appdata/app/config
+        target: /config
+        read_only: true
+      - type: bind
+        source: ./relative-data
+        target: /data
+      - type: volume
+        source: cache
+        target: /cache
+      - type: tmpfs
+        target: /tmp
+volumes:
+  cache: {}

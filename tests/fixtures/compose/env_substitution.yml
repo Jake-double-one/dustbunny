@@ -1,0 +1,13 @@
+services:
+  radarr:
+    image: lscr.io/linuxserver/radarr
+    volumes:
+      - ${APPDATA}/radarr:/config
+      - ${APPDATA_ALT:-/opt/appdata}/prowlarr:/config2
+      - ${CONF-/srv/conf}/bazarr:/config3
+      - $ROOT/plex:/config4
+      - ${UNKNOWN}/lidarr:/config5
+      - ${MISSING:?must be set}/readarr:/config6
+      - ${VOLUME_NAME}:/config7
+    environment:
+      - LITERAL=$${NOT_A_VAR}

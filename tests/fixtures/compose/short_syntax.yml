@@ -1,0 +1,13 @@
+services:
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    volumes:
+      - /opt/appdata/sonarr:/config
+      - /mnt/media/tv:/tv:rw
+      - ./local:/local:ro
+      - named_data:/data
+      - /var/lib/anonymous
+      - "/opt/appdata/quoted:/q"
+      - /opt/appdata/trailing/:/t
+volumes:
+  named_data:

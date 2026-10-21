@@ -1,0 +1,9 @@
+services:
+  app:
+    image: example
+    volumes:
+      - /opt/appdata/app:/config
+      # - /opt/appdata/old-app:/config-old
+    environment:
+      DATA_DIR: /opt/appdata/app-extra
+      URL: http://example.com/opt/appdata/not-a-path
