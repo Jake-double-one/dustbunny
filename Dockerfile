@@ -21,6 +21,7 @@ LABEL org.opencontainers.image.title="Dustbunny" \
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DUSTBUNNY_VERSION=$APP_VERSION \
+    DUSTBUNNY_COMMIT=$GIT_SHA \
     DATA_DIR=/data \
     PORT=8080
 COPY --from=build /install /usr/local

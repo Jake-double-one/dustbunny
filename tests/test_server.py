@@ -154,3 +154,16 @@ def test_scan_request_runs_another_scan(env) -> None:
                 break
             time.sleep(0.05)
         assert len(calls) == 2
+
+
+def test_serve_logs_the_version(tmp_path: Path, monkeypatch, caplog) -> None:
+    import uvicorn
+
+    from dustbunny.server import serve
+
+    monkeypatch.setattr(uvicorn, "run", lambda *a, **kw: None)
+    monkeypatch.setenv("DUSTBUNNY_COMMIT", "e722bb5fd445f8f6c1dbd40e30879f5e3a8e1c92")
+    settings = Settings(scan_roots=[str(tmp_path)], data_dir=tmp_path, docker_enabled=False)
+    with caplog.at_level("INFO", logger="dustbunny.server"):
+        serve(settings)
+    assert f"Dustbunny {__version__} (commit e722bb5)" in caplog.text
