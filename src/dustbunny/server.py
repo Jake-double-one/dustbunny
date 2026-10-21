@@ -44,8 +44,10 @@ class IgnoreRequest(BaseModel):
     ignored: bool = True
 
 
-# After an incomplete scan (e.g. the socket proxy wasn't up yet) try again soon.
+# After an incomplete scan (e.g. the socket proxy wasn't up yet) try again soon - but
+# only a few times: a setup that stays broken must not walk all folders every 2 minutes.
 RETRY_INCOMPLETE = timedelta(minutes=2)
+MAX_RETRIES = 2
 
 
 class Scheduler:
@@ -57,6 +59,7 @@ class Scheduler:
         self.interval = interval
         self.next_scan_at: datetime | None = None
         self.pending = False  # a scan was requested and hasn't finished yet
+        self.retries = 0
         self._wake = asyncio.Event()
         self._task: asyncio.Task[None] | None = None
 
@@ -83,7 +86,10 @@ class Scheduler:
             interval = self.interval
             report = self.service.report
             failed = self.service.last_error is not None or (report and not report.complete)
-            if interval.total_seconds() > 0 and failed:
+            if not failed:
+                self.retries = 0
+            elif interval.total_seconds() > 0 and self.retries < MAX_RETRIES:
+                self.retries += 1
                 interval = min(interval, RETRY_INCOMPLETE)
             seconds = interval.total_seconds()
             self.next_scan_at = (
