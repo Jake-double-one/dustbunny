@@ -65,6 +65,8 @@ export function t(key, vars = {}) {
   return text.replace(/\{(\w+)\}/g, (m, name) => (name in vars ? String(vars[name]) : m));
 }
 
+export const has = key => key in dict || key in fallback;
+
 /** A notice from the server ({code, message, params}) in the current language */
 export function notice(prefix, item) {
   const key = `${prefix}.${item.code}`;

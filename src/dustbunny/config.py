@@ -7,7 +7,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 CommaList = Annotated[list[str], NoDecode]
@@ -99,6 +99,16 @@ class Settings(BaseSettings):
     @classmethod
     def _lower(cls, value: object) -> object:
         return value.strip().lower() if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def _pairs_complete(self) -> Settings:
+        # Half a configuration must not silently turn something off: without the
+        # password the UI would be open, without the key stopped stacks unprotected.
+        if bool(self.auth_user) != bool(self.auth_password):
+            raise ValueError("set both AUTH_USER and AUTH_PASSWORD, or neither")
+        if bool(self.portainer_url) != bool(self.portainer_api_key):
+            raise ValueError("set both PORTAINER_URL and PORTAINER_API_KEY, or neither")
+        return self
 
     @property
     def portainer_enabled(self) -> bool:

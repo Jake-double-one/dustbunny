@@ -17,6 +17,9 @@ LOCALES = sorted(i18n.LOCALES_DIR.glob("*.json"))
 EN = json.loads((i18n.LOCALES_DIR / "en.json").read_text())
 
 
+PLURAL_FORMS = {"zero", "two", "few", "many"}
+
+
 def placeholders(text: str) -> set[str]:
     return set(re.findall(r"\{(\w+)\}", text))
 
@@ -24,10 +27,16 @@ def placeholders(text: str) -> set[str]:
 @pytest.mark.parametrize("path", LOCALES, ids=lambda p: p.stem)
 def test_same_keys_and_placeholders(path: Path) -> None:
     data = json.loads(path.read_text())
-    assert set(data) == set(EN), f"{path.name}: keys differ from en.json"
+    missing = set(EN) - set(data)
+    assert not missing, f"{path.name}: missing keys {sorted(missing)}"
     for key, text in data.items():
         assert isinstance(text, str) and text.strip(), key
-        if key != "language.name":
+        if key not in EN:
+            # extra plural forms (_zero, _two, _few, _many) for languages that have them
+            base, _, form = key.rpartition("_")
+            assert form in PLURAL_FORMS and f"{base}_other" in EN, f"{path.name}: unknown {key}"
+            continue
+        if key not in ("language.name", "format.decimal"):
             assert placeholders(text) == placeholders(EN[key]), f"{path.name}: {key}"
 
 

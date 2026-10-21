@@ -32,7 +32,7 @@ def build_message(
     report: ScanReport, changes: OrphanChanges, *, mode: str, lang: str
 ) -> tuple[str, str] | None:
     """Title and body, or ``None`` if there is nothing to say."""
-    if not report.complete:
+    if not report.reliable:
         return None
     if mode != "always" and not changes.changed:
         return None
@@ -42,7 +42,9 @@ def build_message(
 
     count = report.summary.counts[Category.ORPHAN]
     total = format_size(report.summary.orphan_bytes, lang)
-    if changes.new:
+    if changes.first_scan:
+        title = t("notify.title-first", count=count)
+    elif changes.new:
         title = t("notify.title-new", count=len(changes.new))
     elif changes.resolved:
         title = t("notify.title-resolved", count=len(changes.resolved))
@@ -51,7 +53,7 @@ def build_message(
 
     lines: list[str] = []
     if changes.new:
-        lines.append(t("notify.new-heading"))
+        lines.append(t("notify.first-heading" if changes.first_scan else "notify.new-heading"))
         for folder in changes.new[:MAX_LINES]:
             lines.append(f"• {folder.path} ({format_size(folder.size_bytes, lang)})")
         if len(changes.new) > MAX_LINES:

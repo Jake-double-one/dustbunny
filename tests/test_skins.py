@@ -30,11 +30,12 @@ def test_parse_refuses_unsafe_values() -> None:
         "x",
         "/*\n * name: Ocean\n * name.de: Ozean\n * scheme: dark\n * order: 5\n */\n"
         ":root {\n  --bg: #0B1A2A;\n  --ink: url(evil);\n  --dusk: #12345;\n"
-        "  --shadow: 0 0 2px rgba(0,0,0,.4);\n  --position: absolute;\n}\nbody { color: red }",
+        "  --shadow: 0 0 2px rgba(0,0,0,.4);\n  --position: absolute;\n}\n"
+        "body { --surface: #ffffff }",
     )
     assert skin.names == {"": "Ocean", "de": "Ozean"}
     assert (skin.scheme, skin.order) == ("dark", 5)
-    assert skin.vars == {"bg": "#0b1a2a", "shadow": "0 0 2px rgba(0,0,0,.4)"}
+    assert skin.vars == {"bg": "#0b1a2a", "shadow": "0 0 2px rgba(0,0,0,.4)"}  # not body
     problems = "\n".join(skin.problems)
     assert "--ink" in problems and "--dusk" in problems and "--position" in problems
 

@@ -11,7 +11,7 @@
 
 Wenn du in Portainer einen Stack entfernst (oder `docker compose down` machst und die Compose-Datei löschst),
 bleiben seine Bind-Mounts – etwa `/opt/appdata/<stack>` – auf der Platte. Docker vergisst sie, sobald der
-Container weg ist. Dustbunny listet jeden Ordner in deinen Appdata-Verzeichnissen auf und sagt dir, welche
+Container weg ist. Dustbunny listet jeden Ordner in deinen Scan-Verzeichnissen (z. B. `/opt/appdata`) auf und sagt dir, welche
 nichts mehr verwendet, warum, wie groß sie sind und seit wann sie verwaist sind.
 
 **Dustbunny liest nur.** Es ändert und löscht nichts.
@@ -40,7 +40,7 @@ nichts mehr verwendet, warum, wie groß sie sind und seit wann sie verwaist sind
 | **Begründet alles** | Zu jedem Ordner steht, warum er verwaist ist oder wer ihn verwendet – Container, Stack, Art der Einbindung. |
 | **Größe und Alter** | Belegter Platz wie bei `du`, letzte Änderung irgendwo im Ordner und „seit 23 Tagen verwaist“. |
 | **Im Zweifel sicher** | Ein Ordner, der noch verwendet werden könnte, zählt als verwendet. Fällt eine Quelle aus, ist das Ergebnis als unvollständig markiert und es geht keine Benachrichtigung raus. |
-| **Benachrichtigungen** | Neue oder behobene verwaiste Ordner über [Apprise](https://github.com/caronc/apprise): ntfy, Discord, E-Mail, Telegram, Gotify … |
+| **Benachrichtigungen** | Neu verwaiste Ordner und Ordner, die nicht mehr verwaist sind, über [Apprise](https://github.com/caronc/apprise): ntfy, Discord, E-Mail, Telegram, Gotify … |
 | **Weboberfläche** | Fürs Handy gemacht, mehrere Skins, Deutsch und Englisch, Ordner mit einem Klick ignorieren. |
 | **Nur lesend** | Schreibgeschützte Mounts, ein Socket-Proxy, der nur Lesen erlaubt, schreibgeschütztes Container-Dateisystem. |
 
@@ -50,7 +50,7 @@ nichts mehr verwendet, warum, wie groß sie sind und seit wann sie verwaist sind
 - **Verweise:** jeder Host-Pfad, den etwas noch verwendet oder definiert:
   - Mounts aus der Docker-API – laufende **und** gestoppte Container, auch Named Volumes, die an einen
     Host-Ordner gebunden sind (`driver_opts.device`);
-  - Portainer-Stacks – wichtig, weil ein gestoppter Stack keine Container hat, seine Daten aber braucht;
+  - Portainer-Stacks – wichtig, weil ein gestoppter Stack keine Container hat, seine Daten aber benötigt;
   - Compose-Dateien in Ordnern, die du angibst (Dockge, Komodo, reines Compose).
   Compose-Dateien werden richtig gelesen (kurze und lange Volume-Schreibweise, Named Volumes, `env_file`,
   `secrets`, `configs`, `include`, Variablen aus der Stack-Umgebung oder `.env`) und zusätzlich nach jedem
@@ -70,7 +70,14 @@ nichts mehr verwendet, warum, wie groß sie sind und seit wann sie verwaist sind
 | **Ignoriert** | Ignorier-Regel, in der Oberfläche ignoriert, symbolischer Link oder Systemordner |
 
 Im Zweifel zählt ein Ordner als verwendet: Ein übersehener verwaister Ordner kostet etwas Platz, ein
-fälschlich als verwaist gemeldeter Ordner könnte Daten kosten.
+fälschlich als verwaist gemeldeter Ordner könnte Daten kosten. Deshalb bleibt Dustbunny still, wenn es sich
+nicht sicher ist:
+
+- Fällt eine Quelle aus oder ist ein Scan-Verzeichnis nicht lesbar, ist das Ergebnis **unvollständig**.
+- Lässt sich ein Pfad nicht ganz prüfen (unbekannte Variable, unlesbare Compose-Datei), ist es **unsicher**,
+  und ein Hinweis sagt, was zu beheben ist.
+
+In beiden Fällen gibt es keine Benachrichtigung, und „seit … Tagen verwaist“ zählt nicht weiter.
 
 ## Installation mit Docker / Portainer
 
@@ -89,6 +96,9 @@ docker compose up -d
 ```
 
 Dann `http://<host>:8077` öffnen. Der erste Scan startet sofort.
+
+Image selbst aus dem Repository bauen statt laden:
+`docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
 
 > [!IMPORTANT]
 > **Binde deine Appdata unter genau demselben Pfad ein wie auf dem Host.** Docker meldet Host-Pfade, also
@@ -120,7 +130,7 @@ Alle Einstellungen sind Umgebungsvariablen. Die vollständige Tabelle mit allen 
 | `SCAN_ROOTS` | **Pflicht.** Appdata-Ordner, kommagetrennt. Jeden unter demselben Pfad einbinden. |
 | `IGNORE` | Zu überspringende Ordner: Namen oder Pfade, Globs erlaubt (`backup-*,/opt/appdata/behalten`) |
 | `PATH_ALIASES` | Pfad-Übersetzungen `HOST=LOKAL`, kommagetrennt |
-| `SCAN_INTERVAL` | `30m`, `6h` (Standard), `1d` … `0` = nur auf Knopfdruck |
+| `SCAN_INTERVAL` | `30m`, `6h` (Standard), `1d` … `0` = keine geplanten Scans (einer beim Start, dann auf Knopfdruck) |
 | `PORTAINER_URL`, `PORTAINER_API_KEY` | Portainer-Adresse und Zugriffstoken (*My account → Access tokens*) |
 | `PORTAINER_ENDPOINT_ID` | Nur Stacks dieser Umgebung (die Zahl in ihrer Portainer-Adresse) |
 | `PORTAINER_INSECURE` | `true` bei selbstsigniertem Zertifikat |
@@ -131,10 +141,10 @@ Alle Einstellungen sind Umgebungsvariablen. Die vollständige Tabelle mit allen 
 ## Quellen
 
 **Docker:** Alle Container, laufende und gestoppte, mit Bind-Mounts, an Host-Ordner gebundenen Named Volumes
-und den Compose-Labels. Der Socket-Proxy braucht `CONTAINERS=1` und `VOLUMES=1`.
+und den Compose-Labels. Der Socket-Proxy benötigt `CONTAINERS=1` und `VOLUMES=1`.
 
 **Portainer:** Nötig, wenn du Stacks in Portainer stoppst: Portainer entfernt dabei die Container, dann sagt
-nur noch die Stack-Datei, dass die Daten gebraucht werden. Mehrere Hosts in einem Portainer: setze
+nur noch die Stack-Datei, dass die Daten noch verwendet werden. Mehrere Hosts in einem Portainer: setze
 `PORTAINER_ENDPOINT_ID` auf den Host, auf dem Dustbunny läuft.
 
 **Compose-Ordner:** Für Dockge, Komodo oder reines `docker compose`: `COMPOSE_DIRS=/opt/stacks` liest
@@ -144,8 +154,9 @@ Pfade (`./config`) stimmen.
 ## Benachrichtigungen
 
 `NOTIFY_URLS` mit einer oder mehreren [Apprise-URLs](https://github.com/caronc/apprise/wiki), z. B.
-`ntfy://ntfy.sh/mein-thema`. Die Nachricht nennt neu verwaiste Ordner mit Größe und Ordner, die nicht mehr
-verwaist sind. Unvollständige Ergebnisse benachrichtigen nie.
+`ntfy://ntfy.sh/mein-thema`. Der erste Scan nennt alle gefundenen verwaisten Ordner; danach nennt eine
+Nachricht neu verwaiste Ordner mit Größe und Ordner, die nicht mehr verwaist sind. Unvollständige oder
+unsichere Ergebnisse benachrichtigen nie.
 
 ## Ordnergrößen und Rechte
 
@@ -172,7 +183,8 @@ Schlüssel und `{Platzhalter}` vorhanden sind. Die Begriffe erklärt [`docs/glos
 
 ## API und Kommandozeile
 
-`GET /api/report` liefert den letzten Bericht als JSON, `POST /api/scan` startet einen Scan,
+`GET /api/report` liefert den letzten Bericht als JSON, `POST /api/scan` startet einen Scan
+(POST nur mit JSON: `curl -X POST -H 'Content-Type: application/json' -d '{}' http://host:8077/api/scan`),
 `GET /healthz` ist der Gesundheitscheck. `dustbunny --once --json` macht einen einzelnen Scan ohne Webserver.
 Details in der [englischen README](README.md#api-and-command-line).
 
