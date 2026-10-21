@@ -46,6 +46,10 @@ CREATE TABLE IF NOT EXISTS meta (
 """
 
 
+# scans in a row a root must be empty before its orphans count as removed
+EMPTY_SCANS = 3
+
+
 @dataclass
 class OrphanChanges:
     """Difference to the previous complete scan."""
@@ -68,6 +72,8 @@ class ScanInputs(BaseModel):
     sources: list[SourceStatus]
     warnings: list[Notice] = []
     failed_roots: list[str] = []
+    roots: list[str] = []  # the configuration they belong to
+    aliases: dict[str, str] = {}
 
 
 class State:
@@ -110,20 +116,35 @@ class State:
 
     # ---- orphans ---------------------------------------------------------------
 
-    def track_orphans(self, report: ScanReport) -> OrphanChanges:
+    def track_orphans(self, report: ScanReport, *, new_scan: bool = True) -> OrphanChanges:
         """Record orphans of a report and fill in ``first_seen``.
 
         Only a reliable report changes what is recorded: an incomplete or
         uncertain one would make folders appear and disappear wrongly.
+        ``new_scan=False`` for a report rebuilt from the same scan (ignore).
         """
         changes = OrphanChanges()
         orphans = {f.path: f for f in report.folders if f.category is Category.ORPHAN}
         by_path = {f.path: f for f in report.folders}
-        # A scan root without any folder is more likely not mounted than emptied:
-        # its known orphans stay as they are.
+        # A scan root without any folder is more likely not mounted than emptied: its
+        # known orphans stay as they are - unless it stays empty for EMPTY_SCANS scans.
         roots_seen = {f.root for f in report.folders}
-        unseen_roots = [r for r in report.roots if r not in roots_seen]
         with self._connect() as db:
+            unseen_roots = []
+            for root in report.roots:
+                key = f"empty:{root}"
+                if root in roots_seen:
+                    db.execute("DELETE FROM meta WHERE key = ?", (key,))
+                    continue
+                row = db.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+                count = int(row[0]) if row else 0
+                if new_scan and report.reliable:
+                    count += 1
+                    db.execute(
+                        "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (key, str(count))
+                    )
+                if count < EMPTY_SCANS:
+                    unseen_roots.append(root)
             known = dict(db.execute("SELECT path, since FROM orphans").fetchall())
             changes.first_scan = (
                 db.execute("SELECT 1 FROM meta WHERE key = 'tracked'").fetchone() is None
