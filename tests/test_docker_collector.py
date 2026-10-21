@@ -87,6 +87,15 @@ def test_other_errors_propagate(fixtures: Path) -> None:
         DockerCollector(api).collect()
 
 
-def test_own_container_is_skipped(fixtures: Path) -> None:
-    result = DockerCollector(FakeApi(fixtures), own_id="aaa111").collect()
-    assert not any(r.owner == "sonarr" for r in result.references)
+def test_own_container_is_recognised(fixtures: Path) -> None:
+    collector = DockerCollector(FakeApi(fixtures), own_id="aaa111")
+    result = collector.collect()
+    assert collector.own_names == {"sonarr", "media"}
+    assert any(r.owner == "sonarr" for r in result.references)  # filtered later, by the service
+
+
+def test_volume_source_counts(fixtures: Path) -> None:
+    result = DockerCollector(FakeApi(fixtures)).collect()
+    assert "/var/lib/docker/volumes/plain/_data" in {
+        r.path for r in result.references if r.kind == "volume"
+    }

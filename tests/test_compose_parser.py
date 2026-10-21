@@ -75,7 +75,20 @@ def test_env_substitution_from_portainer_style_env(compose_text) -> None:
         env={"APPDATA": "/data/apps", "UNKNOWN": "/x", "MISSING": "/y", "ROOT": "/r"},
     )
     assert {"/data/apps/radarr", "/x/lidarr", "/y/readarr"} <= by_kind(result, "bind")
-    assert not any(r.glob for r in result.references)
+    # Variables with a default that aren't in the env might still be set elsewhere:
+    # the default is used and the unknown case is kept as a pattern, too.
+    assert {"/opt/appdata/prowlarr", "/srv/conf/bazarr"} <= by_kind(result, "bind")
+    assert {r.glob for r in result.references if r.glob} == {"*/prowlarr", "*/bazarr"}
+
+
+def test_parent_dir_after_variable_stays_a_pattern() -> None:
+    text = (
+        "services:\n  a:\n    volumes:\n"
+        "      - ${BASE}/../appdata/sonarr:/c\n      - ~/../../opt/x:/d\n"
+    )
+    result = parse_compose(text)
+    globs = {r.glob for r in result.references if r.glob}
+    assert globs == {"*/appdata/sonarr", "*/opt/x"}
 
 
 def test_extras(compose_text) -> None:

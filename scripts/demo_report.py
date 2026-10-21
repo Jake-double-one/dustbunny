@@ -1,6 +1,6 @@
 """Write a realistic demo report for UI work and screenshots.
 
-python scripts/demo_report.py > web/demo/report.json
+python scripts/demo_report.py > src/dustbunny/web/static/demo/report.json
 """
 
 from __future__ import annotations

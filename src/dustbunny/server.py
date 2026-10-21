@@ -44,14 +44,22 @@ class IgnoreRequest(BaseModel):
     ignored: bool = True
 
 
+# After an incomplete scan (e.g. the socket proxy wasn't up yet) try again soon - but
+# only a few times: a setup that stays broken must not walk all folders every 2 minutes.
+RETRY_INCOMPLETE = timedelta(minutes=2)
+MAX_RETRIES = 2
+
+
 class Scheduler:
-    """Runs a scan at start and then every ``interval`` (0 = only on request)."""
+    """Runs a scan at start and then every ``interval`` (0 = only on request).
+    ``trigger`` must be called from the event loop (async endpoints)."""
 
     def __init__(self, service: ScanService, interval: timedelta):
         self.service = service
         self.interval = interval
         self.next_scan_at: datetime | None = None
         self.pending = False  # a scan was requested and hasn't finished yet
+        self.retries = 0
         self._wake = asyncio.Event()
         self._task: asyncio.Task[None] | None = None
 
@@ -75,9 +83,17 @@ class Scheduler:
                 with suppress(Exception):  # logged by the service, the loop goes on
                     await asyncio.to_thread(self.service.scan)
             self.pending = self._wake.is_set()
-            seconds = self.interval.total_seconds()
+            interval = self.interval
+            report = self.service.report
+            failed = self.service.last_error is not None or (report and not report.complete)
+            if not failed:
+                self.retries = 0
+            elif interval.total_seconds() > 0 and self.retries < MAX_RETRIES:
+                self.retries += 1
+                interval = min(interval, RETRY_INCOMPLETE)
+            seconds = interval.total_seconds()
             self.next_scan_at = (
-                datetime.now(UTC) + self.interval if seconds > 0 and self.service.ready else None
+                datetime.now(UTC) + interval if seconds > 0 and self.service.ready else None
             )
             with suppress(TimeoutError):
                 await asyncio.wait_for(self._wake.wait(), timeout=seconds if seconds > 0 else None)
@@ -111,11 +127,18 @@ def create_app(settings: Settings, service: ScanService | None = None) -> FastAP
     ) -> Response:
         protected = settings.auth_enabled and request.url.path != "/healthz"
         if protected and not _authorized(request, settings):
-            return Response(
+            response = Response(
                 status_code=401,
                 headers={"WWW-Authenticate": 'Basic realm="Dustbunny", charset="UTF-8"'},
             )
-        response = await call_next(request)
+        elif request.method == "POST" and not request.headers.get("content-type", "").startswith(
+            "application/json"
+        ):
+            # Browsers can't send JSON to another site without asking first (CORS),
+            # so this keeps other web pages from triggering scans with your login.
+            response = JSONResponse({"detail": "expected application/json"}, status_code=415)
+        else:
+            response = await call_next(request)
         for key, value in SECURITY_HEADERS.items():
             response.headers.setdefault(key, value)
         return response
@@ -144,7 +167,7 @@ def create_app(settings: Settings, service: ScanService | None = None) -> FastAP
         return Response(service.report.model_dump_json(), media_type="application/json")
 
     @app.post("/api/scan", status_code=202)
-    def scan() -> dict[str, bool]:
+    async def scan() -> dict[str, bool]:
         if not service.ready:
             raise HTTPException(status_code=409, detail=service.config_error)
         started = not service.scanning

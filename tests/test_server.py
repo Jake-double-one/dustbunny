@@ -69,7 +69,9 @@ def test_full_flow(env) -> None:
         assert next(f for f in r.json()["folders"] if f["name"] == "old")["category"] == "orphan"
         assert client.post("/api/ignore", json={"path": "/etc", "ignored": True}).status_code == 404
 
-        assert client.post("/api/scan").status_code == 202
+        assert client.post("/api/scan", json={}).status_code == 202
+        # a plain form post (what another web page could send) is refused
+        assert client.post("/api/scan", data={"x": "1"}).status_code == 415
         status = client.get("/api/status").json()
         assert status["roots"] == [str(env[0])] and status["config_error"] is None
 
@@ -100,6 +102,7 @@ def test_basic_auth(env) -> None:
     with TestClient(create_app(settings, service)) as client:
         assert client.get("/healthz").status_code == 200
         assert client.get("/").status_code == 401
+        assert client.get("/").headers["x-frame-options"] == "DENY"
         assert client.get("/api/report").headers["www-authenticate"].startswith("Basic")
         bad = base64.b64encode(b"admin:wrong").decode()
         assert client.get("/", headers={"Authorization": f"Basic {bad}"}).status_code == 401
@@ -113,5 +116,31 @@ def test_config_error_is_shown_not_fatal(tmp_path: Path) -> None:
         status = client.get("/api/status").json()
         assert "SCAN_ROOTS" in status["config_error"]
         assert client.get("/api/report").status_code == 404
-        assert client.post("/api/scan").status_code == 409
+        assert client.post("/api/scan", json={}).status_code == 409
         assert client.get("/healthz").json()["status"] == "ok"
+
+
+def test_scan_request_runs_another_scan(env) -> None:
+    root, refs, tmp = env
+    calls = []
+
+    class Counting(StaticCollector):
+        def collect(self):
+            calls.append(1)
+            return super().collect()
+
+    settings = Settings(
+        scan_roots=[str(root)], data_dir=tmp / "data", scan_interval="0", docker_enabled=False
+    )
+    service = ScanService(
+        settings, State(settings.data_dir / "db.sqlite3"), collectors=lambda: [Counting([refs])]
+    )
+    with TestClient(create_app(settings, service)) as client:
+        wait_for_report(client)
+        assert len(calls) == 1
+        assert client.post("/api/scan", json={}).status_code == 202
+        for _ in range(100):
+            if len(calls) == 2 and not client.get("/api/status").json()["scanning"]:
+                break
+            time.sleep(0.05)
+        assert len(calls) == 2

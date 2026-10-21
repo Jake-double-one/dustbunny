@@ -52,23 +52,28 @@ class DockerCollector:
     ):
         self._client = client
         self.timeout = timeout
-        # Dustbunny's own container mounts the scan roots; listing it as "broad access"
-        # next to every folder would only be noise.
+        # Dustbunny's own container: its name and compose project end up in
+        # own_names, so its mounts of the scan roots can be left out as noise.
         self.own_id = own_id
+        self.own_names: set[str] = set()
 
     def collect(self) -> CollectorResult:
         api = self._client or default_client(self.timeout)
         result = CollectorResult()
         volumes = _VolumeLookup(api)
         for summary in api.containers(all=True):
-            if self.own_id and str(summary.get("Id", "")).startswith(self.own_id):
-                continue
             try:
                 info = api.inspect_container(summary["Id"])
             except Exception as exc:
                 if _status(exc) == 404:  # removed between list and inspect
                     continue
                 raise
+            if self.own_id and str(info.get("Id", "")).startswith(self.own_id):
+                labels = (info.get("Config") or {}).get("Labels") or {}
+                self.own_names = {
+                    str(info.get("Name", "")).lstrip("/"),
+                    labels.get("com.docker.compose.project", ""),
+                } - {""}
             result.references.extend(self._container_references(info, volumes))
         if volumes.failed:
             names = ", ".join(sorted(volumes.failed))
@@ -94,8 +99,12 @@ class DockerCollector:
             kind = mount.get("Type")
             if kind == "bind" and mount.get("Source"):
                 found.append((mount["Source"], "bind", origin))
-            elif kind == "volume" and mount.get("Name") and mount.get("Driver", "local") == "local":
-                add_volume(mount["Name"])
+            elif kind == "volume":
+                # where the volume lives - for plugins like local-persist this is a host folder
+                if mount.get("Source"):
+                    found.append((mount["Source"], "volume", origin))
+                if mount.get("Name") and mount.get("Driver", "local") == "local":
+                    add_volume(mount["Name"])
 
         for bind in (info.get("HostConfig") or {}).get("Binds") or []:
             source = str(bind).split(":", 1)[0]
