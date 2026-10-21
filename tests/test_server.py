@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from dustbunny import __version__
 from dustbunny.collectors.static import StaticCollector
 from dustbunny.config import Settings
 from dustbunny.server import create_app
@@ -88,6 +89,15 @@ def test_page_assets_and_headers(env) -> None:
         assert "<!--" not in page.text.split("<body>")[0].replace("<!-- ", "")
         assert "frame-ancestors 'none'" in page.headers["content-security-policy"]
         assert client.get("/static/app.js").status_code == 200
+        # CSS and JS are linked under the version and must be revalidated
+        css = re.search(r'href="(static/[^"]+/app\.css)"', page.text).group(1)
+        assert css == f"static/{__version__.replace('+', '-')}/app.css"
+        assert 'src="static/' in page.text and 'src="static/app.js"' not in page.text
+        styles = client.get(f"/{css}")
+        assert styles.status_code == 200 and styles.headers["cache-control"] == "no-cache"
+        again = client.get(f"/{css}", headers={"If-None-Match": styles.headers["etag"]})
+        assert again.status_code == 304
+        assert client.get(f"/{css.rsplit('/', 1)[0]}/i18n.js").status_code == 200
         assert client.get("/static/fonts/ibm-plex-mono-latin-400-normal.woff2").status_code == 200
         assert client.get("/locales/de.json").json()["category.orphan"] == "Verwaist"
         assert client.get("/locales/xx.json").status_code == 404
