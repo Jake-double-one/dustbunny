@@ -315,6 +315,8 @@ def serve(settings: Settings) -> None:
         level=settings.log_level.upper(),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    commit = os.environ.get("DUSTBUNNY_COMMIT", "")[:7]
+    log.info("Dustbunny %s%s", __version__, f" (commit {commit})" if commit else "")
     uvicorn.run(
         create_app(settings),
         host=settings.host,
