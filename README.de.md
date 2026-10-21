@@ -30,6 +30,7 @@ nichts mehr verwendet, warum, wie groß sie sind und seit wann sie verwaist sind
 - [Reverse Proxy](#reverse-proxy)
 - [Skins](#skins)
 - [Sprachen](#sprachen)
+- [KI-Agents (MCP)](#ki-agents-mcp)
 - [API und Kommandozeile](#api-und-kommandozeile)
 - [Entwicklung](#entwicklung)
 
@@ -138,6 +139,7 @@ Alle Einstellungen sind Umgebungsvariablen. Die vollständige Tabelle mit allen 
 | `COMPOSE_DIRS` | Ordner mit einem Stack pro Unterordner |
 | `NOTIFY_URLS`, `NOTIFY_ON`, `NOTIFY_LANGUAGE` | Apprise-URLs, `change` oder `always`, `en` oder `de` |
 | `AUTH_USER` / `AUTH_PASSWORD` | Passwort für die Oberfläche. Empfohlen, wenn andere sie erreichen können. |
+| `MCP_ENABLED`, `MCP_TOKEN`, `MCP_ALLOW_CHANGES` | KI-Agents über MCP – siehe [KI-Agents (MCP)](#ki-agents-mcp) |
 
 ## Quellen
 
@@ -197,6 +199,38 @@ Oberfläche und Benachrichtigungen gibt es auf Englisch und Deutsch. **Neue Spra
 [`src/dustbunny/locales/en.json`](src/dustbunny/locales/en.json) nach `<code>.json` kopieren, Werte
 übersetzen, `language.name` setzen – sie erscheint automatisch im Sprachmenü. `pytest` prüft, dass alle
 Schlüssel und `{Platzhalter}` vorhanden sind. Die Begriffe erklärt [`docs/glossary.md`](docs/glossary.md).
+
+## KI-Agents (MCP)
+
+KI-Agents können über das [Model Context Protocol](https://modelcontextprotocol.io) mit Dustbunny arbeiten:
+„Welche Appdata-Ordner sind verwaist und wie groß?“, „Warum ist paperless nur definiert?“, „Scanne neu und
+sag mir, was sich geändert hat.“
+
+1. `MCP_ENABLED: "true"` und einen geheimen `MCP_TOKEN` setzen (mindestens 24 Zeichen, z. B.
+   `openssl rand -hex 24`).
+2. Agent verbinden:
+
+| Agent | So geht's |
+|---|---|
+| **Claude** (Web, Desktop, App) | Einstellungen → Konnektoren → *Benutzerdefinierten Konnektor hinzufügen* → Name „Dustbunny“, Adresse `https://<dein-server>/mcp/<MCP_TOKEN>` |
+| **ChatGPT** | Einstellungen → Apps & Konnektoren → Entwicklermodus → *Konnektor erstellen* → dieselbe Adresse, keine Authentifizierung |
+| **Grok** | grok.com/connectors → *New connector* → *Custom* → dieselbe Adresse |
+| **Claude Code** | `claude mcp add --transport http dustbunny https://<dein-server>/mcp --header "Authorization: Bearer <MCP_TOKEN>"` |
+| **Andere Clients** | `POST /mcp` mit `Authorization: Bearer <MCP_TOKEN>` oder die Adresse mit Schlüssel |
+
+Cloud-Agents (Claude, ChatGPT, Grok) rufen Dustbunny von ihren Servern aus auf: Es muss per **HTTPS** aus dem
+Internet erreichbar sein – also hinter deinen [Reverse Proxy](#reverse-proxy). Agents im eigenen Netz (Claude
+Code, Claude Desktop mit lokalem Konnektor) können `http://<host>:8077` verwenden.
+
+**Was Agents können:** `get_summary` (Zahlen, verwaiste Datenmenge, ob das Ergebnis vollständig ist),
+`list_folders` (nach Kategorie oder Suche), `get_folder` (Begründung, welche Container und Stacks ihn verwenden),
+`start_scan`. Mit `MCP_ALLOW_CHANGES: "true"` zusätzlich `set_folder_ignored`. Nie möglich: irgendetwas an einem
+Ordner zu ändern – Dustbunny kann das nicht, also können es Agents auch nicht.
+
+**Schlüssel geheim halten:** Er ist der einzige Schutz von `/mcp` (Basic Auth gilt dort nicht). Wer ihn hat,
+kann die Ordnerliste lesen. Einen neuen `MCP_TOKEN` setzen trennt alle Agents. Der Anbieter des Agents sieht
+die Ordnernamen und Pfade, nach denen er fragt. Mit `LOG_LEVEL=debug` zeigt das Zugriffsprotokoll die
+Anfragepfade, also auch den Schlüssel.
 
 ## API und Kommandozeile
 

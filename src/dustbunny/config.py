@@ -11,6 +11,7 @@ from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 CommaList = Annotated[list[str], NoDecode]
+MIN_MCP_TOKEN = 24
 
 _DURATION_RE = re.compile(r"(\d+)\s*([smhdw]?)", re.IGNORECASE)
 _DURATION_UNITS = {"": 1, "s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
@@ -65,6 +66,11 @@ class Settings(BaseSettings):
     port: int = Field(default=8080, ge=1, le=65535)
     auth_user: str | None = None
     auth_password: SecretStr | None = None
+
+    # AI agents (MCP)
+    mcp_enabled: bool = False
+    mcp_token: SecretStr | None = None
+    mcp_allow_changes: bool = False
     data_dir: Path = Path("/data")
     skins_dir: Path | None = None
     log_level: Literal["debug", "info", "warning", "error"] = "info"
@@ -87,6 +93,7 @@ class Settings(BaseSettings):
         "portainer_endpoint_id",
         "auth_user",
         "auth_password",
+        "mcp_token",
         "skins_dir",
         mode="before",
     )
@@ -108,6 +115,13 @@ class Settings(BaseSettings):
             raise ValueError("set both AUTH_USER and AUTH_PASSWORD, or neither")
         if bool(self.portainer_url) != bool(self.portainer_api_key):
             raise ValueError("set both PORTAINER_URL and PORTAINER_API_KEY, or neither")
+        if self.mcp_enabled:
+            token = self.mcp_token.get_secret_value() if self.mcp_token else ""
+            if len(token) < MIN_MCP_TOKEN or not token.isascii() or "/" in token:
+                raise ValueError(
+                    f"MCP_ENABLED needs MCP_TOKEN: at least {MIN_MCP_TOKEN} characters without "
+                    "'/', e.g. from `openssl rand -hex 24`"
+                )
         return self
 
     @property

@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from dustbunny import __version__
 from dustbunny.config import Settings
 from dustbunny.i18n import LOCALES_DIR, available_languages, load_locale
+from dustbunny.mcp_server import McpServer, origin_allowed, token_matches
 from dustbunny.service import ScanService
 from dustbunny.skins import SkinCache
 from dustbunny.state import State
@@ -125,7 +126,10 @@ def create_app(settings: Settings, service: ScanService | None = None) -> FastAP
     async def guard(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
-        protected = settings.auth_enabled and request.url.path != "/healthz"
+        path = request.url.path
+        # MCP has its own key (MCP_TOKEN): agents can't do Basic Auth
+        is_mcp = settings.mcp_enabled and (path == "/mcp" or path.startswith("/mcp/"))
+        protected = settings.auth_enabled and path != "/healthz" and not is_mcp
         if protected and not _authorized(request, settings):
             response = Response(
                 status_code=401,
@@ -142,6 +146,9 @@ def create_app(settings: Settings, service: ScanService | None = None) -> FastAP
         for key, value in SECURITY_HEADERS.items():
             response.headers.setdefault(key, value)
         return response
+
+    if settings.mcp_enabled:
+        _add_mcp_routes(app, settings, service, scheduler)
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
@@ -212,6 +219,46 @@ def create_app(settings: Settings, service: ScanService | None = None) -> FastAP
     app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
     assert LOCALES_DIR.is_dir()
     return app
+
+
+def _add_mcp_routes(
+    app: FastAPI, settings: Settings, service: ScanService, scheduler: Scheduler
+) -> None:
+    assert settings.mcp_token is not None
+    token = settings.mcp_token.get_secret_value()
+
+    def trigger() -> bool:  # runs on the event loop (async endpoint)
+        started = not (service.scanning or scheduler.pending)
+        scheduler.trigger()
+        return started
+
+    server = McpServer(service, trigger, allow_changes=settings.mcp_allow_changes)
+
+    async def answer(request: Request, authorized: bool) -> Response:
+        if not authorized:
+            return JSONResponse({"detail": "not found"}, status_code=404)
+        if not origin_allowed(request.headers.get("origin"), request.headers.get("host")):
+            return JSONResponse({"detail": "origin not allowed"}, status_code=403)
+        if request.method != "POST":
+            # stateless: no event stream to open, no session to end
+            return Response(status_code=405, headers={"Allow": "POST"})
+        message = server.handle(await request.body())
+        if message is None:
+            return Response(status_code=202)
+        return JSONResponse(message, headers={"Cache-Control": "no-store"})
+
+    methods = ["GET", "POST", "DELETE"]
+
+    # Agents with a connector UI (Claude, ChatGPT, Grok) only take an address: the key is in it.
+    @app.api_route("/mcp/{key}", methods=methods, include_in_schema=False)
+    async def mcp_with_key(key: str, request: Request) -> Response:
+        return await answer(request, token_matches(key, token))
+
+    # Clients that can send a header (Claude Code, scripts): Authorization: Bearer <key>
+    @app.api_route("/mcp", methods=methods, include_in_schema=False)
+    async def mcp_with_header(request: Request) -> Response:
+        scheme, _, given = request.headers.get("authorization", "").partition(" ")
+        return await answer(request, scheme.lower() == "bearer" and token_matches(given, token))
 
 
 def _authorized(request: Request, settings: Settings) -> bool:

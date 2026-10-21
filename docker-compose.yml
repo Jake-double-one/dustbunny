@@ -37,6 +37,10 @@ services:
       # Password for the web UI (recommended when it can be reached by others)
       AUTH_USER: ""
       AUTH_PASSWORD: ""
+      # AI agents (Claude, ChatGPT, Grok, Claude Code …) via MCP at /mcp - see README "AI agents (MCP)".
+      MCP_ENABLED: "false"
+      MCP_TOKEN: ""                        # secret key, e.g. from: openssl rand -hex 24
+      MCP_ALLOW_CHANGES: "false"           # "true": agents may also ignore folders
     volumes:
       - /opt/appdata:/opt/appdata:ro       # ← same path left and right, read-only
       # - /opt/stacks:/opt/stacks:ro       # for COMPOSE_DIRS
