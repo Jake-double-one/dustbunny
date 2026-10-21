@@ -70,6 +70,7 @@ class Candidate(BaseModel):
     is_mountpoint: bool = False
     size_bytes: int | None = None
     last_modified: datetime | None = None
+    created: datetime | None = None
     stats_complete: bool = True
 
 
@@ -99,6 +100,9 @@ class FolderResult(BaseModel):
     checked_sources: list[str] = Field(default_factory=list)
     size_bytes: int | None = None
     last_modified: datetime | None = None
+    created: datetime | None = Field(
+        default=None, description="When the folder was created, if the file system knows it."
+    )
     stats_complete: bool = True
     is_symlink: bool = False
     is_mountpoint: bool = False

@@ -89,3 +89,13 @@ def test_validate_roots() -> None:
     for bad in (["relative"], ["/"], [], [" "]):
         with pytest.raises(ValueError):
             validate_roots(bad)
+
+
+def test_created_date(tmp_path: Path) -> None:
+    (tmp_path / "app").mkdir()
+    (candidate,) = discover([str(tmp_path)], with_stats=False).candidates
+    # most local file systems record it; network shares don't (then it's None)
+    if candidate.created is not None:
+        import time
+
+        assert abs(candidate.created.timestamp() - time.time()) < 120

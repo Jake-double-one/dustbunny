@@ -70,6 +70,11 @@ def test_handshake_and_tools(env) -> None:  # noqa: F811
         summary = call(client, "get_summary")["structuredContent"]
         assert summary["counts"]["orphan"] == 1 and summary["complete"]
 
+        by_name = call(client, "list_folders", sort="name")["structuredContent"]
+        assert [f["name"] for f in by_name["folders"]] == ["old", "used"]
+        assert "created" in by_name["folders"][0]
+        assert call(client, "list_folders", sort="weird")["isError"]
+
         orphans = call(client, "list_folders", category="orphan")["structuredContent"]
         assert [f["name"] for f in orphans["folders"]] == ["old"]
         assert orphans["folders"][0]["orphaned_since"]

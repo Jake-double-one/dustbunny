@@ -110,6 +110,9 @@ section { margin-bottom: 28px; }
 }
 .search::placeholder { color: var(--muted); }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.sorting { display: flex; gap: 8px; align-items: center; margin-left: auto; }
+.sorting .pill-select { min-height: 34px; font-size: .78rem; }
+@media (max-width: 560px) { .sorting { margin-left: 0; } }
 
 /* Folder list */
 .list { background: var(--line); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; display: grid; gap: 1px; box-shadow: var(--shadow); }

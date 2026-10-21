@@ -50,6 +50,14 @@
 
   "search.placeholder": "Search folder, path or container",
 
+  "sort.label": "Sort",
+  "sort.category": "Category",
+  "sort.name": "Name",
+  "sort.size": "Size",
+  "sort.created": "Created",
+  "sort.changed": "Last change",
+  "sort.reverse": "Reverse order",
+
   "list.empty": "Nothing found. Try another filter?",
 
   "hint.demo": "Demo data – not your system.",
@@ -64,12 +72,14 @@
   "row.orphanedFor_one": "orphaned for {count} day",
   "row.orphanedFor_other": "orphaned for {count} days",
   "row.changed": "changed {when}",
+  "row.created": "created {when}",
   "row.usedBy": "{owners} · {state}",
 
   "detail.why": "Why",
   "detail.usedBy": "Used by",
   "detail.broad": "Mounts the whole scan root",
   "detail.size": "Size",
+  "detail.created": "Created",
   "detail.lastChange": "Last change",
   "detail.orphanedSince": "Orphaned since",
   "detail.sources": "Sources checked",

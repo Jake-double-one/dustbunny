@@ -50,6 +50,14 @@
 
   "search.placeholder": "Ordner, Pfad oder Container suchen",
 
+  "sort.label": "Sortieren",
+  "sort.category": "Kategorie",
+  "sort.name": "Name",
+  "sort.size": "Größe",
+  "sort.created": "Erstellt",
+  "sort.changed": "Zuletzt geändert",
+  "sort.reverse": "Reihenfolge umkehren",
+
   "list.empty": "Nichts gefunden. Anderer Filter?",
 
   "hint.demo": "Demo-Daten – nicht dein System.",
@@ -64,12 +72,14 @@
   "row.orphanedFor_one": "seit {count} Tag verwaist",
   "row.orphanedFor_other": "seit {count} Tagen verwaist",
   "row.changed": "geändert {when}",
+  "row.created": "erstellt {when}",
   "row.usedBy": "{owners} · {state}",
 
   "detail.why": "Warum",
   "detail.usedBy": "Verwendet von",
   "detail.broad": "Bindet das ganze Scan-Verzeichnis ein",
   "detail.size": "Größe",
+  "detail.created": "Erstellt",
   "detail.lastChange": "Letzte Änderung",
   "detail.orphanedSince": "Verwaist seit",
   "detail.sources": "Geprüfte Quellen",

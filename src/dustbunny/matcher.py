@@ -213,6 +213,7 @@ def _classify_one(
         checked_sources=list(checked_sources),
         size_bytes=candidate.size_bytes,
         last_modified=candidate.last_modified,
+        created=candidate.created,
         stats_complete=candidate.stats_complete,
         is_symlink=candidate.is_symlink,
         is_mountpoint=candidate.is_mountpoint,

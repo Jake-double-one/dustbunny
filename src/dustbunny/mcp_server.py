@@ -163,6 +163,12 @@ class McpServer:
                             "description": "Part of the folder name, path or container name",
                         },
                         "limit": {"type": "integer", "minimum": 1, "maximum": 500},
+                        "sort": {
+                            "type": "string",
+                            "enum": list(SORTS),
+                            "description": "category (default: orphaned first), name, size "
+                            "(largest first), created or changed (newest first)",
+                        },
                     },
                     "additionalProperties": False,
                 },
@@ -257,12 +263,16 @@ class McpServer:
         limit = args.get("limit") or 100
         if not isinstance(limit, int) or not 1 <= limit <= 500:
             raise ToolError("limit must be a number from 1 to 500")
+        sort = args.get("sort") or "category"
+        if sort not in SORTS:
+            raise ToolError(f"Unknown sort {sort!r}")
         found = [
             f
             for f in report.folders
             if (category == "all" or f.category.value == category)
             and (not query or query in _haystack(f))
         ]
+        found = SORTS[sort](found)
         return {
             "total": len(found),
             "shown": min(len(found), limit),
@@ -304,6 +314,26 @@ class McpServer:
         return _folder_line(updated)
 
 
+def _newest_first(key: Callable[[FolderResult], Any]) -> Callable[[list], list]:
+    # unknown values (None) go last
+    return lambda folders: sorted(folders, key=lambda f: (key(f) is None, -_num(key(f))))
+
+
+def _num(value: Any) -> float:
+    if value is None:
+        return 0.0
+    return value.timestamp() if hasattr(value, "timestamp") else float(value)
+
+
+SORTS: dict[str, Callable[[list[FolderResult]], list[FolderResult]]] = {
+    "category": lambda folders: list(folders),  # the report's order: orphaned first
+    "name": lambda folders: sorted(folders, key=lambda f: (f.name.casefold(), f.path)),
+    "size": _newest_first(lambda f: f.size_bytes),
+    "created": _newest_first(lambda f: f.created),
+    "changed": _newest_first(lambda f: f.last_modified),
+}
+
+
 def _haystack(folder: FolderResult) -> str:
     owners = [h.reference.owner or "" for h in [*folder.protected_by, *folder.broad_access]]
     return " ".join([folder.name, folder.path, *owners]).lower()
@@ -317,6 +347,7 @@ def _folder_line(folder: FolderResult) -> dict[str, Any]:
         "size": format_size(folder.size_bytes),
         "size_bytes": folder.size_bytes,
         "orphaned_since": folder.first_seen.isoformat() if folder.first_seen else None,
+        "created": folder.created.isoformat() if folder.created else None,
         "last_change": folder.last_modified.isoformat() if folder.last_modified else None,
         "reason": folder.reasons[0].message if folder.reasons else None,
     }
