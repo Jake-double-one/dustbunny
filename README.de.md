@@ -89,8 +89,9 @@ In beiden Fällen gibt es keine Benachrichtigung, und „seit … Tagen verwaist
 ## Installation mit Docker / Portainer
 
 Das Image gibt es für `amd64` und `arm64`: `ghcr.io/jake-double-one/dustbunny:latest`.
-`latest` ist der neueste Release, `0.3.1` oder `0.3` halten eine Version fest, `main` folgt dem
-Entwicklungsstand (unten auf der Seite steht dann z. B. `0.3.1+1a2b3c4`).
+`latest` ist immer der neueste Stand (jede Änderung auf `main` und jeder Release); `0.3.1` oder `0.3`
+halten einen Release fest. Ein Build zwischen zwei Releases zeigt den Commit neben der Version, z. B.
+`0.3.1+1a2b3c4`.
 
 **Portainer:** *Stacks → Add stack → Web editor*, [`docker-compose.yml`](docker-compose.yml) einfügen, die
 mit `←` markierten Zeilen anpassen, *Deploy the stack*. Oder *Repository* mit
