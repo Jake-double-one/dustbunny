@@ -27,6 +27,7 @@ nichts mehr verwendet, warum, wie groß sie sind und seit wann sie verwaist sind
 - [Quellen](#quellen)
 - [Benachrichtigungen](#benachrichtigungen)
 - [Ordnergrößen und Rechte](#ordnergrößen-und-rechte)
+- [Reverse Proxy](#reverse-proxy)
 - [Skins](#skins)
 - [Sprachen](#sprachen)
 - [API und Kommandozeile](#api-und-kommandozeile)
@@ -166,6 +167,22 @@ Appdata-Ordner gehören oft verschiedenen Benutzern und sind für andere nicht l
   Dieser root kann jede Datei lesen, aber nirgends schreiben außer in `/data`.
 - **Ohne root:** die Zeilen `user` und `cap_add` entfernen. Dustbunny läuft dann als uid 1000; Größen fremder
   Ordner sind als unvollständig markiert, die Erkennung selbst ist davon nicht betroffen.
+
+## Reverse Proxy
+
+Dustbunny läuft hinter Traefik, Nginx Proxy Manager, Caddy und Co. ohne zusätzliche Einstellungen:
+
+- **Port nicht offen lassen.** Setze den Port in `docker-compose.yml` auf `"127.0.0.1:8077:8080"` (Proxy auf
+  demselben Host) oder entferne `ports:` und lass den Proxy `dustbunny:8080` über ein gemeinsames
+  Docker-Netz erreichen. Sonst umgeht der offene Port den Proxy und dessen Anmeldung.
+- **Anmeldung:** entweder die von Dustbunny (`AUTH_USER` / `AUTH_PASSWORD`, der Proxy reicht sie durch) oder
+  die des Proxys (Authelia, Authentik …) – dann die von Dustbunny leer lassen und den Port wie oben
+  schließen.
+- **Proxy-Header** (`X-Forwarded-For`, `X-Forwarded-Proto`) benötigt Dustbunny nicht und ignoriert sie: Die
+  Adresse des Aufrufers wird für nichts verwendet, alle Links sind relativ, Cookies gibt es keine.
+- **Unterpfad** (`https://example.com/dustbunny/`): klappt, wenn der Proxy den Präfix entfernt (Traefik
+  `StripPrefix`, Nginx `proxy_pass http://dustbunny:8080/;`).
+- `/healthz` braucht kein Passwort, für Health-Checks von Proxy oder Docker.
 
 ## Skins
 
