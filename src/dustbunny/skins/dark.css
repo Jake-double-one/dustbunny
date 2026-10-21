@@ -1,0 +1,32 @@
+/*
+ * Dustbunny skin – The standard dark skin – also used for a dark browser until someone picks a skin.
+ *
+ * name: Dark
+ * name.de: Dunkel
+ * scheme: dark
+ * default: dark
+ * order: 10
+ */
+:root {
+  --bg: #101714;
+  --surface: #18211d;
+  --surface-2: #212c27;
+  --ink: #e6ede5;
+  --muted: #93a497;
+  --line: #2b3831;
+  --dusk: #9a91ff;
+  --dusk-soft: #2a2a54;
+  --sun: #f0b429;
+  --sun-soft: #46351a;
+  --alert: #f08a6b;
+  --ok: #6fcf97;
+  --control: #71857a;
+  --control-ink: #c3d0c6;
+  --on-dusk: #10102a;
+  --on-sun: #201503;
+  --on-alert: #1c0a04;
+  --focus-bg: #000000;
+  --focus-ink: #ffffff;
+  --focus-dim: #7a7a7a;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 40px -22px rgba(0, 0, 0, 0.9);
+}

@@ -1,0 +1,31 @@
+/*
+ * Dustbunny skin – True black – easy on OLED screens at night.
+ *
+ * name: AMOLED
+ * name.de: AMOLED
+ * scheme: dark
+ * order: 20
+ */
+:root {
+  --bg: #000000;
+  --surface: #0b0d0c;
+  --surface-2: #161a18;
+  --ink: #eef3ee;
+  --muted: #9aab9f;
+  --line: #232a26;
+  --dusk: #a59dff;
+  --dusk-soft: #1d1b40;
+  --sun: #f2b93a;
+  --sun-soft: #3a2c10;
+  --alert: #ff9478;
+  --ok: #74d49c;
+  --control: #73867b;
+  --control-ink: #cbd6ce;
+  --on-dusk: #0c0a24;
+  --on-sun: #201503;
+  --on-alert: #1c0a04;
+  --focus-bg: #000000;
+  --focus-ink: #ffffff;
+  --focus-dim: #7a7a7a;
+  --shadow: 0 0 0 1px rgba(255, 255, 255, 0.04);
+}

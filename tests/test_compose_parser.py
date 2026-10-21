@@ -27,7 +27,9 @@ def test_short_syntax(compose_text) -> None:
 def test_short_syntax_relative_paths_skipped_without_base_dir(compose_text) -> None:
     result = parse_compose(compose_text("short_syntax.yml"))
     assert "/opt/stacks/sonarr/local" not in by_kind(result, "bind")
-    assert any("./local" in w for w in result.warnings)
+    assert any(
+        w.code == "compose-relative-path" and w.params["path"] == "./local" for w in result.warnings
+    )
 
 
 def test_long_syntax(compose_text) -> None:
@@ -61,7 +63,7 @@ def test_env_substitution(compose_text) -> None:
     assert readarr.glob == "*/readarr"
     # A lone unresolved variable may be a volume name: not a path, but warned about.
     assert not any(r.path == "${VOLUME_NAME}" for r in result.references)
-    assert any("VOLUME_NAME" in w for w in result.warnings)
+    assert any(w.code == "compose-unresolved-volume" for w in result.warnings)
     # $$ escapes must not turn into references or unresolved markers.
     assert not any("NOT_A_VAR" in r.path for r in result.references)
 
@@ -73,7 +75,20 @@ def test_env_substitution_from_portainer_style_env(compose_text) -> None:
         env={"APPDATA": "/data/apps", "UNKNOWN": "/x", "MISSING": "/y", "ROOT": "/r"},
     )
     assert {"/data/apps/radarr", "/x/lidarr", "/y/readarr"} <= by_kind(result, "bind")
-    assert not any(r.glob for r in result.references)
+    # Variables with a default that aren't in the env might still be set elsewhere:
+    # the default is used and the unknown case is kept as a pattern, too.
+    assert {"/opt/appdata/prowlarr", "/srv/conf/bazarr"} <= by_kind(result, "bind")
+    assert {r.glob for r in result.references if r.glob} == {"*/prowlarr", "*/bazarr"}
+
+
+def test_parent_dir_after_variable_stays_a_pattern() -> None:
+    text = (
+        "services:\n  a:\n    volumes:\n"
+        "      - ${BASE}/../appdata/sonarr:/c\n      - ~/../../opt/x:/d\n"
+    )
+    result = parse_compose(text)
+    globs = {r.glob for r in result.references if r.glob}
+    assert globs == {"*/appdata/sonarr", "*/opt/x"}
 
 
 def test_extras(compose_text) -> None:
@@ -98,7 +113,7 @@ def test_extras(compose_text) -> None:
 def test_broken_yaml_falls_back_to_raw_text(compose_text) -> None:
     result = parse_compose(compose_text("broken.yml"))
     assert "/opt/appdata/broken" in by_kind(result, "raw-text")
-    assert any("YAML could not be parsed" in w for w in result.warnings)
+    assert result.warnings[0].code == "compose-invalid-yaml"
 
 
 def test_raw_text_safety_net(compose_text) -> None:

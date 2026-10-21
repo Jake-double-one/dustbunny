@@ -1,0 +1,596 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-21T07:42:00Z",
+  "roots": [
+    "/opt/appdata"
+  ],
+  "complete": true,
+  "sources": [
+    {
+      "name": "docker",
+      "ok": true,
+      "error": null,
+      "reference_count": 7,
+      "warnings": []
+    },
+    {
+      "name": "portainer",
+      "ok": true,
+      "error": null,
+      "reference_count": 4,
+      "warnings": []
+    }
+  ],
+  "warnings": [
+    {
+      "code": "unresolved-path",
+      "message": "monitoring: ${DATA}/grafana contains unknown variables and may point into /opt/appdata, but matches no folder there. Make the variables known (stack environment, .env) so the path can be checked.",
+      "params": {
+        "owner": "monitoring",
+        "path": "${DATA}/grafana",
+        "root": "/opt/appdata"
+      }
+    }
+  ],
+  "summary": {
+    "total": 10,
+    "counts": {
+      "active": 3,
+      "stopped": 1,
+      "defined-only": 1,
+      "orphan": 3,
+      "ignored": 2
+    },
+    "total_bytes": 37546167498,
+    "orphan_bytes": 7032589516
+  },
+  "folders": [
+    {
+      "path": "/opt/appdata/heimdall",
+      "root": "/opt/appdata",
+      "name": "heimdall",
+      "category": "orphan",
+      "reasons": [
+        {
+          "code": "no-reference",
+          "message": "Nothing references this folder or anything inside it.",
+          "params": {}
+        },
+        {
+          "code": "broad-access-only",
+          "message": "Only duplicati sees it, because the whole scan root is mounted there. That doesn't count as use.",
+          "params": {
+            "owners": "duplicati"
+          }
+        }
+      ],
+      "protected_by": [],
+      "broad_access": [
+        {
+          "reference": {
+            "path": "/opt/appdata",
+            "source": "docker",
+            "kind": "bind",
+            "state": "running",
+            "owner": "duplicati",
+            "origin": null,
+            "glob": null
+          },
+          "relation": "broad",
+          "matched_path": "/opt/appdata/heimdall"
+        }
+      ],
+      "checked_sources": [
+        "docker",
+        "portainer"
+      ],
+      "size_bytes": 50331648,
+      "last_modified": "2026-09-21T04:42:00Z",
+      "stats_complete": true,
+      "is_symlink": false,
+      "is_mountpoint": false,
+      "first_seen": "2026-10-19T07:42:00Z"
+    },
+    {
+      "path": "/opt/appdata/immich-old",
+      "root": "/opt/appdata",
+      "name": "immich-old",
+      "category": "orphan",
+      "reasons": [
+        {
+          "code": "no-reference",
+          "message": "Nothing references this folder or anything inside it.",
+          "params": {}
+        },
+        {
+          "code": "broad-access-only",
+          "message": "Only duplicati sees it, because the whole scan root is mounted there. That doesn't count as use.",
+          "params": {
+            "owners": "duplicati"
+          }
+        }
+      ],
+      "protected_by": [],
+      "broad_access": [
+        {
+          "reference": {
+            "path": "/opt/appdata",
+            "source": "docker",
+            "kind": "bind",
+            "state": "running",
+            "owner": "duplicati",
+            "origin": null,
+            "glob": null
+          },
+          "relation": "broad",
+          "matched_path": "/opt/appdata/immich-old"
+        }
+      ],
+      "checked_sources": [
+        "docker",
+        "portainer"
+      ],
+      "size_bytes": 6657199308,
+      "last_modified": "2026-03-23T04:42:00Z",
+      "stats_complete": true,
+      "is_symlink": false,
+      "is_mountpoint": false,
+      "first_seen": "2026-09-28T07:42:00Z"
+    },
+    {
+      "path": "/opt/appdata/wikijs-test",
+      "root": "/opt/appdata",
+      "name": "wikijs-test",
+      "category": "orphan",
+      "reasons": [
+        {
+          "code": "no-reference",
+          "message": "Nothing references this folder or anything inside it.",
+          "params": {}
+        },
+        {
+          "code": "broad-access-only",
+          "message": "Only duplicati sees it, because the whole scan root is mounted there. That doesn't count as use.",
+          "params": {
+            "owners": "duplicati"
+          }
+        }
+      ],
+      "protected_by": [],
+      "broad_access": [
+        {
+          "reference": {
+            "path": "/opt/appdata",
+            "source": "docker",
+            "kind": "bind",
+            "state": "running",
+            "owner": "duplicati",
+            "origin": null,
+            "glob": null
+          },
+          "relation": "broad",
+          "matched_path": "/opt/appdata/wikijs-test"
+        }
+      ],
+      "checked_sources": [
+        "docker",
+        "portainer"
+      ],
+      "size_bytes": 325058560,
+      "last_modified": "2026-06-03T04:42:00Z",
+      "stats_complete": true,
+      "is_symlink": false,
+      "is_mountpoint": false,
+      "first_seen": "2026-08-21T07:42:00Z"
+    },
+    {
+      "path": "/opt/appdata/paperless",
+      "root": "/opt/appdata",
+      "name": "paperless",
+      "category": "defined-only",
+      "reasons": [
+        {
+          "code": "defined-only",
+          "message": "Still in a stack or compose file, but no container exists: paperless.",
+          "params": {
+            "owners": "paperless"
+          }
+        }
+      ],
+      "protected_by": [
+        {
+          "reference": {
+            "path": "/opt/appdata/paperless/data",
+            "source": "portainer",
+            "kind": "bind",
+            "state": "defined",
+            "owner": "paperless",
+            "origin": null,
+            "glob": null
+          },
+          "relation": "inside",
+          "matched_path": "/opt/appdata/paperless"
+        },
+        {
+          "reference": {
+            "path": "/opt/appdata/paperless/media",
+            "source": "portainer",
+            "kind": "bind",
+            "state": "defined",
+            "owner": "paperless",
+            "origin": null,
+            "glob": null
+          },
+          "relation": "inside",
+          "matched_path": "/opt/appdata/paperless"
+        }
+      ],
+      "broad_access": [
+        {
+          "reference": {
+            "path": "/opt/appdata",
+            "source": "docker",
+            "kind": "bind",
+            "state": "running",
+            "owner": "duplicati",
+            "origin": null,
+            "glob": null
+          },
+          "relation": "broad",
+          "matched_path": "/opt/appdata/paperless"
+        }
+      ],
+      "checked_sources": [
+        "docker",
+        "portainer"
+      ],
+      "size_bytes": 2469606195,
+      "last_modified": "2026-07-17T04:42:00Z",
+      "stats_complete": true,
+      "is_symlink": false,
+      "is_mountpoint": false,
+      "first_seen": null
+    },
+    {
+      "path": "/opt/appdata/nextcloud",
+      "root": "/opt/appdata",
+      "name": "nextcloud",
+      "category": "stopped",
+      "reasons": [
+        {
+          "code": "used-stopped",
+          "message": "Only used by stopped containers: nextcloud-app, nextcloud-db.",
+          "params": {
+            "owners": "nextcloud-app, nextcloud-db"
+          }
+        }
+      ],
+      "protected_by": [
+        {
+          "reference": {
+            "path": "/opt/appdata/nextcloud/html",
+            "source": "docker",
+            "kind": "bind",
+            "state": "stopped",
+            "owner": "nextcloud-app",
+            "origin": null,
+            "glob": null
+          },
+          "relation": "inside",
+          "matched_path": "/opt/appdata/nextcloud"
+        },
+        {
+          "reference": {
+            "path": "/opt/appdata/nextcloud/db",
+            "source": "docker",
+            "kind": "bind",
+            "state": "stopped",
+            "owner": "nextcloud-db",
+            "origin": null,
+            "glob": null
+          },
+          "relation": "inside",
+          "matched_path": "/opt/appdata/nextcloud"
+        },
+        {
+          "reference": {
+            "path": "/opt/appdata/nextcloud/html",
+            "source": "portainer",
+            "kind": "bind",
+            "state": "defined",
+            "owner": "nextcloud",
+            "origin": null,
+            "glob": null
+          },
+          "relation": "inside",
+          "matched_path": "/opt/appdata/nextcloud"
+        }
+      ],
+      "broad_access": [
+        {
+          "reference": {
+            "path": "/opt/appdata",
+            "source": "docker",
+            "kind": "bind",
+            "state": "running",
+            "owner": "duplicati",
+            "origin": null,
+            "glob": null
+          },
+          "relation": "broad",
+          "matched_path": "/opt/appdata/nextcloud"
+        }
+      ],
+      "checked_sources": [
+        "docker",
+        "portainer"
+      ],
+      "size_bytes": 3328599654,
+      "last_modified": "2026-09-10T04:42:00Z",
+      "stats_complete": true,
+      "is_symlink": false,
+      "is_mountpoint": false,
+      "first_seen": null
+    },
+    {
+      "path": "/opt/appdata/jellyfin",
+      "root": "/opt/appdata",
+      "name": "jellyfin",
+      "category": "active",
+      "reasons": [
+        {
+          "code": "used-running",
+          "message": "Used by running containers: jellyfin.",
+          "params": {
+            "owners": "jellyfin"
+          }
+        }
+      ],
+      "protected_by": [
+        {
+          "reference": {
+            "path": "/opt/appdata/jellyfin/config",
+            "source": "docker",
+            "kind": "bind",
+            "state": "running",
+            "owner": "jellyfin",
+            "origin": null,
+            "glob": null
+          },
+          "relation": "inside",
+          "matched_path": "/opt/appdata/jellyfin"
+        },
+        {
+          "reference": {
+            "path": "/opt/appdata/jellyfin/cache",
+            "source": "docker",
+            "kind": "bind",
+            "state": "running",
+            "owner": "jellyfin",
+            "origin": null,
+            "glob": null
+          },
+          "relation": "inside",
+          "matched_path": "/opt/appdata/jellyfin"
+        }
+      ],
+      "broad_access": [
+        {
+          "reference": {
+            "path": "/opt/appdata",
+            "source": "docker",
+            "kind": "bind",
+            "state": "running",
+            "owner": "duplicati",
+            "origin": null,
+            "glob": null
+          },
+          "relation": "broad",
+          "matched_path": "/opt/appdata/jellyfin"
+        }
+      ],
+      "checked_sources": [
+        "docker",
+        "portainer"
+      ],
+      "size_bytes": 9019431321,
+      "last_modified": "2026-10-21T04:42:00Z",
+      "stats_complete": true,
+      "is_symlink": false,
+      "is_mountpoint": false,
+      "first_seen": null
+    },
+    {
+      "path": "/opt/appdata/radarr",
+      "root": "/opt/appdata",
+      "name": "radarr",
+      "category": "active",
+      "reasons": [
+        {
+          "code": "used-running",
+          "message": "Used by running containers: radarr.",
+          "params": {
+            "owners": "radarr"
+          }
+        }
+      ],
+      "protected_by": [
+        {
+          "reference": {
+            "path": "/opt/appdata/radarr",
+            "source": "docker",
+            "kind": "bind",
+            "state": "running",
+            "owner": "radarr",
+            "origin": null,
+            "glob": null
+          },
+          "relation": "exact",
+          "matched_path": "/opt/appdata/radarr"
+        }
+      ],
+      "broad_access": [
+        {
+          "reference": {
+            "path": "/opt/appdata",
+            "source": "docker",
+            "kind": "bind",
+            "state": "running",
+            "owner": "duplicati",
+            "origin": null,
+            "glob": null
+          },
+          "relation": "broad",
+          "matched_path": "/opt/appdata/radarr"
+        }
+      ],
+      "checked_sources": [
+        "docker",
+        "portainer"
+      ],
+      "size_bytes": 985661440,
+      "last_modified": "2026-10-21T04:42:00Z",
+      "stats_complete": true,
+      "is_symlink": false,
+      "is_mountpoint": false,
+      "first_seen": null
+    },
+    {
+      "path": "/opt/appdata/sonarr",
+      "root": "/opt/appdata",
+      "name": "sonarr",
+      "category": "active",
+      "reasons": [
+        {
+          "code": "used-running",
+          "message": "Used by running containers: sonarr.",
+          "params": {
+            "owners": "sonarr"
+          }
+        }
+      ],
+      "protected_by": [
+        {
+          "reference": {
+            "path": "/opt/appdata/sonarr",
+            "source": "docker",
+            "kind": "bind",
+            "state": "running",
+            "owner": "sonarr",
+            "origin": null,
+            "glob": null
+          },
+          "relation": "exact",
+          "matched_path": "/opt/appdata/sonarr"
+        }
+      ],
+      "broad_access": [
+        {
+          "reference": {
+            "path": "/opt/appdata",
+            "source": "docker",
+            "kind": "bind",
+            "state": "running",
+            "owner": "duplicati",
+            "origin": null,
+            "glob": null
+          },
+          "relation": "broad",
+          "matched_path": "/opt/appdata/sonarr"
+        }
+      ],
+      "checked_sources": [
+        "docker",
+        "portainer"
+      ],
+      "size_bytes": 1288490188,
+      "last_modified": "2026-10-21T04:42:00Z",
+      "stats_complete": true,
+      "is_symlink": false,
+      "is_mountpoint": false,
+      "first_seen": null
+    },
+    {
+      "path": "/opt/appdata/backup-2024",
+      "root": "/opt/appdata",
+      "name": "backup-2024",
+      "category": "ignored",
+      "reasons": [
+        {
+          "code": "ignore-rule",
+          "message": "Matches the ignore rule backup-*.",
+          "params": {
+            "rule": "backup-*"
+          }
+        }
+      ],
+      "protected_by": [],
+      "broad_access": [
+        {
+          "reference": {
+            "path": "/opt/appdata",
+            "source": "docker",
+            "kind": "bind",
+            "state": "running",
+            "owner": "duplicati",
+            "origin": null,
+            "glob": null
+          },
+          "relation": "broad",
+          "matched_path": "/opt/appdata/backup-2024"
+        }
+      ],
+      "checked_sources": [
+        "docker",
+        "portainer"
+      ],
+      "size_bytes": 13421772800,
+      "last_modified": "2025-12-25T04:42:00Z",
+      "stats_complete": true,
+      "is_symlink": false,
+      "is_mountpoint": false,
+      "first_seen": null
+    },
+    {
+      "path": "/opt/appdata/lost+found",
+      "root": "/opt/appdata",
+      "name": "lost+found",
+      "category": "ignored",
+      "reasons": [
+        {
+          "code": "builtin-ignore",
+          "message": "System folder, always skipped (lost+found).",
+          "params": {
+            "rule": "lost+found"
+          }
+        }
+      ],
+      "protected_by": [],
+      "broad_access": [
+        {
+          "reference": {
+            "path": "/opt/appdata",
+            "source": "docker",
+            "kind": "bind",
+            "state": "running",
+            "owner": "duplicati",
+            "origin": null,
+            "glob": null
+          },
+          "relation": "broad",
+          "matched_path": "/opt/appdata/lost+found"
+        }
+      ],
+      "checked_sources": [
+        "docker",
+        "portainer"
+      ],
+      "size_bytes": 16384,
+      "last_modified": "2024-05-04T04:42:00Z",
+      "stats_complete": true,
+      "is_symlink": false,
+      "is_mountpoint": false,
+      "first_seen": null
+    }
+  ]
+}

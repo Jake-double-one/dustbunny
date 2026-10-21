@@ -1,0 +1,7 @@
+{
+  "nc_db": {"Name": "nc_db", "Driver": "local", "Mountpoint": "/var/lib/docker/volumes/nc_db/_data",
+            "Options": {"type": "none", "o": "bind", "device": "/opt/appdata/nextcloud/db"}},
+  "plain": {"Name": "plain", "Driver": "local", "Mountpoint": "/var/lib/docker/volumes/plain/_data", "Options": null},
+  "legacy_vol": {"Name": "legacy_vol", "Driver": "local", "Mountpoint": "/var/lib/docker/volumes/legacy_vol/_data",
+                 "Options": {"type": "nfs", "o": "addr=10.0.0.5", "device": ":/export/legacy"}}
+}

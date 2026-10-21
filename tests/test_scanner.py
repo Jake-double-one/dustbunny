@@ -40,7 +40,7 @@ def test_discover_without_stats(tmp_path: Path) -> None:
 def test_discover_missing_root_warns(tmp_path: Path) -> None:
     result = discover([str(tmp_path / "missing")])
     assert result.candidates == []
-    assert "not accessible" in result.warnings[0]
+    assert result.warnings[0].code == "root-missing"
 
 
 def test_symlinked_root_exposes_real_path(tmp_path: Path) -> None:

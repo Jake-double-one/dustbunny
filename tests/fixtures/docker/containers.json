@@ -1,0 +1,42 @@
+[
+  {
+    "Id": "aaa111",
+    "Name": "/sonarr",
+    "State": {"Status": "running"},
+    "Mounts": [
+      {"Type": "bind", "Source": "/opt/appdata/sonarr", "Destination": "/config", "RW": true},
+      {"Type": "bind", "Source": "/mnt/media/tv", "Destination": "/tv", "RW": true}
+    ],
+    "HostConfig": {"Binds": ["/opt/appdata/sonarr:/config", "/mnt/media/tv:/tv"]},
+    "Config": {"Labels": {
+      "com.docker.compose.project": "media",
+      "com.docker.compose.project.working_dir": "/opt/stacks/media",
+      "com.docker.compose.project.config_files": "/opt/stacks/media/compose.yaml,/opt/stacks/media/compose.override.yaml"
+    }}
+  },
+  {
+    "Id": "bbb222",
+    "Name": "/nextcloud-db",
+    "State": {"Status": "exited"},
+    "Mounts": [
+      {"Type": "volume", "Name": "nc_db", "Source": "/var/lib/docker/volumes/nc_db/_data", "Driver": "local", "Destination": "/var/lib/mysql"},
+      {"Type": "volume", "Name": "plain", "Source": "/var/lib/docker/volumes/plain/_data", "Driver": "local", "Destination": "/plain"},
+      {"Type": "volume", "Name": "remote", "Source": "", "Driver": "rclone", "Destination": "/remote"}
+    ],
+    "HostConfig": {"Binds": null},
+    "Config": {"Labels": {}}
+  },
+  {
+    "Id": "ccc333",
+    "Name": "/legacy",
+    "State": {"Status": "paused"},
+    "Mounts": [],
+    "HostConfig": {"Binds": ["/opt/appdata/legacy/data:/data:ro", "legacy_vol:/vol"]},
+    "Config": {"Labels": null}
+  },
+  {
+    "Id": "ddd444",
+    "Name": "/gone",
+    "State": {"Status": "removing"}
+  }
+]

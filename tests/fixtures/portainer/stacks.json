@@ -1,0 +1,13 @@
+[
+  {
+    "Id": 1, "Name": "media", "Type": 2, "EndpointId": 2, "Status": 1,
+    "Env": [{"name": "APPDATA", "value": "/opt/appdata"}, {"name": "TZ", "value": "Europe/Berlin"}]
+  },
+  {
+    "Id": 2, "Name": "paperless", "Type": 2, "EndpointId": 2, "Status": 2,
+    "Env": [], "AdditionalFiles": ["docker-compose.override.yml"]
+  },
+  {
+    "Id": 3, "Name": "other-host", "Type": 2, "EndpointId": 7, "Status": 1, "Env": null
+  }
+]

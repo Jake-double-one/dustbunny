@@ -4,27 +4,28 @@ Rules (see README "How detection works"):
 
 * A reference R *protects* candidate D if R == D or R lies inside D.
 * If D lies inside R, R covers a whole scan root (candidates are direct
-  children of a root). Such "broad" mounts - backup tools, file managers -
+  children of a root). Such broad mounts - backup tools, file managers -
   are listed for information but never protect a folder.
 * References with unresolved parts (``${DATA}/sonarr``) protect D when a
   prefix of the pattern that ends in a literal path segment matches D.
 * The best protecting reference decides the category:
   running > stopped > defined. Nothing protecting -> orphan.
-* Ignore rules, symlinks and nested scan roots -> ignored (always wins).
+* Symlinks, nested scan roots and ignore rules -> ignored (always wins).
 """
 
 from __future__ import annotations
 
 import fnmatch
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
+from dustbunny.i18n import reason, warning
 from dustbunny.models import (
     Candidate,
     Category,
     FolderResult,
-    Reason,
+    Notice,
     Reference,
     ReferenceHit,
     RefState,
@@ -33,7 +34,7 @@ from dustbunny.models import (
     SourceStatus,
     Summary,
 )
-from dustbunny.paths import apply_aliases, is_same_or_under, is_under, normalize
+from dustbunny.paths import apply_aliases, is_same_or_under, is_under, normalize, normalize_glob
 
 # Folders that are never app data. Matched against the folder name.
 BUILTIN_IGNORE = (
@@ -45,11 +46,36 @@ BUILTIN_IGNORE = (
     ".Trash-*",
 )
 
+CATEGORY_ORDER = (
+    Category.ORPHAN,
+    Category.DEFINED_ONLY,
+    Category.STOPPED,
+    Category.ACTIVE,
+    Category.IGNORED,
+)
+
+# Warnings that mean "some references may be missing": such a report must not
+# notify or change what Dustbunny remembers (see ScanReport.reliable).
+UNCERTAIN_WARNINGS = frozenset(
+    {
+        "unresolved-path",
+        "compose-invalid-yaml",
+        "compose-not-mapping",
+        "compose-unresolved-volume",
+        "portainer-additional-files",
+    }
+)
+
 _STATE_RANK = {RefState.RUNNING: 0, RefState.STOPPED: 1, RefState.DEFINED: 2}
 _STATE_CATEGORY = {
     RefState.RUNNING: Category.ACTIVE,
     RefState.STOPPED: Category.STOPPED,
     RefState.DEFINED: Category.DEFINED_ONLY,
+}
+_STATE_REASON = {
+    RefState.RUNNING: "used-running",
+    RefState.STOPPED: "used-stopped",
+    RefState.DEFINED: "defined-only",
 }
 
 
@@ -62,10 +88,16 @@ class _PreparedRef:
     exact: re.Pattern[str] | None = None  # full pattern, if it ends in a literal segment
 
 
-def _prepare(ref: Reference, aliases: Mapping[str, str]) -> _PreparedRef:
+def _prepare(
+    ref: Reference, aliases: Mapping[str, str], links: Mapping[str, str] | None = None
+) -> _PreparedRef:
+    """``aliases`` translate host paths (PATH_ALIASES), ``links`` map symlinks
+    inside a scan root to their targets, so a mount of the link protects the target."""
+    links = links or {}
     if ref.glob is None:
-        return _PreparedRef(ref=ref, path=apply_aliases(normalize(ref.path), aliases))
-    glob = apply_aliases(normalize(ref.glob), aliases)
+        path = apply_aliases(apply_aliases(normalize(ref.path), aliases), links)
+        return _PreparedRef(ref=ref, path=path)
+    glob = apply_aliases(apply_aliases(normalize_glob(ref.glob), aliases), links)
     segments = glob.split("/")
     prefixes = []
     for end in range(1, len(segments) + 1):
@@ -98,16 +130,24 @@ def _relation(prepared: _PreparedRef, identity: str) -> Relation | None:
     return None
 
 
-def _ignore_rule(candidate: Candidate, ignore: Sequence[str]) -> str | None:
+def _ignore_rule(candidate: Candidate, rules: Sequence[str]) -> str | None:
     relative = candidate.path[len(candidate.root) :].lstrip("/")
-    for rule in ignore:
-        target_is_path = "/" in rule
-        if target_is_path:
+    for rule in rules:
+        if "/" in rule:
             if fnmatch.fnmatchcase(candidate.path, rule) or fnmatch.fnmatchcase(relative, rule):
                 return rule
         elif fnmatch.fnmatchcase(candidate.name, rule):
             return rule
     return None
+
+
+def owners(hits: Iterable[ReferenceHit]) -> str:
+    names: list[str] = []
+    for hit in hits:
+        name = hit.reference.owner or hit.reference.origin or hit.reference.path
+        if name not in names:
+            names.append(name)
+    return ", ".join(names)
 
 
 def classify(
@@ -116,16 +156,28 @@ def classify(
     *,
     roots: Sequence[str],
     ignore: Sequence[str] = (),
+    ignored_paths: Collection[str] = (),
     aliases: Mapping[str, str] | None = None,
     checked_sources: Sequence[str] = (),
 ) -> list[FolderResult]:
+    """``ignore`` are glob rules (IGNORE), ``ignored_paths`` exact folders
+    ignored in the web UI."""
     aliases = aliases or {}
+    candidates = list(candidates)
     roots = [normalize(r) for r in roots]
-    prepared = [_prepare(ref, aliases) for ref in references]
-    results = []
-    for candidate in candidates:
-        results.append(_classify_one(candidate, prepared, roots, ignore, checked_sources))
-    return results
+    links = symlink_aliases(candidates)
+    prepared = [_prepare(ref, aliases, links) for ref in references]
+    ignored = {normalize(p) for p in ignored_paths}
+    return [_classify_one(c, prepared, roots, ignore, ignored, checked_sources) for c in candidates]
+
+
+def symlink_aliases(candidates: Iterable[Candidate]) -> dict[str, str]:
+    """``/opt/appdata/sonarr -> sonarr-v4``: a mount of the link uses the target."""
+    return {
+        normalize(c.path): normalize(c.link_target)
+        for c in candidates
+        if c.is_symlink and c.link_target
+    }
 
 
 def _classify_one(
@@ -133,6 +185,7 @@ def _classify_one(
     prepared: Sequence[_PreparedRef],
     roots: Sequence[str],
     ignore: Sequence[str],
+    ignored_paths: Collection[str],
     checked_sources: Sequence[str],
 ) -> FolderResult:
     identities = [normalize(candidate.path)]
@@ -165,50 +218,30 @@ def _classify_one(
         is_mountpoint=candidate.is_mountpoint,
     )
 
-    ignored = _ignored_reason(candidate, identities, roots, ignore)
+    ignored = _ignored_reason(candidate, identities, roots, ignore, ignored_paths)
     if ignored is not None:
         result.category = Category.IGNORED
         result.reasons.append(ignored)
     elif protected:
         best = min(protected, key=lambda h: _STATE_RANK[h.reference.state]).reference.state
         result.category = _STATE_CATEGORY[best]
-        result.reasons.append(_protected_reason(best, protected))
-        if any(h.reference.is_pattern for h in protected):
-            result.reasons.append(
-                Reason(
-                    code="unresolved-match",
-                    message="Matched a path with unresolved variables; "
-                    "treated as referenced to be safe.",
-                )
-            )
-    else:
         result.reasons.append(
-            Reason(
-                code="no-reference",
-                message="Nothing references this folder or anything inside it.",
+            reason(
+                _STATE_REASON[best],
+                owners=owners(h for h in protected if h.reference.state is best),
             )
         )
+        if any(h.reference.is_pattern for h in protected):
+            result.reasons.append(reason("unresolved-match"))
+    else:
+        result.reasons.append(reason("no-reference"))
         if broad:
-            owners = _owners(broad)
-            result.reasons.append(
-                Reason(
-                    code="broad-access-only",
-                    message=f"Only broad mounts of the whole root cover it ({owners}); "
-                    "these don't count as usage.",
-                )
-            )
+            result.reasons.append(reason("broad-access-only", owners=owners(broad)))
 
     if candidate.is_mountpoint:
-        result.reasons.append(
-            Reason(code="mountpoint", message="This folder is a separate mount point.")
-        )
+        result.reasons.append(reason("mountpoint"))
     if not candidate.stats_complete:
-        result.reasons.append(
-            Reason(
-                code="stats-incomplete",
-                message="Size/age are incomplete: some entries could not be read.",
-            )
-        )
+        result.reasons.append(reason("stats-incomplete"))
     return result
 
 
@@ -217,40 +250,22 @@ def _ignored_reason(
     identities: Sequence[str],
     roots: Sequence[str],
     ignore: Sequence[str],
-) -> Reason | None:
+    ignored_paths: Collection[str],
+) -> Notice | None:
     if candidate.is_symlink:
-        return Reason(code="symlink", message="Symbolic link - never treated as app data.")
+        return reason("symlink", target=candidate.link_target or "?")
     for root in roots:
         if any(is_same_or_under(root, identity) for identity in identities):
-            return Reason(code="nested-root", message=f"Is or contains the scan root {root}.")
+            return reason("nested-root", root=root)
     rule = _ignore_rule(candidate, BUILTIN_IGNORE)
     if rule is not None:
-        return Reason(code="builtin-ignore", message=f"Built-in ignore rule {rule!r}.")
+        return reason("builtin-ignore", rule=rule)
+    if normalize(candidate.path) in ignored_paths:
+        return reason("ignored-by-user")
     rule = _ignore_rule(candidate, ignore)
     if rule is not None:
-        return Reason(code="ignore-rule", message=f"Matches ignore rule {rule!r}.")
+        return reason("ignore-rule", rule=rule)
     return None
-
-
-def _owners(hits: Iterable[ReferenceHit]) -> str:
-    names: list[str] = []
-    for hit in hits:
-        name = hit.reference.owner or hit.reference.origin or hit.reference.path
-        if name not in names:
-            names.append(name)
-    return ", ".join(names)
-
-
-def _protected_reason(state: RefState, hits: Sequence[ReferenceHit]) -> Reason:
-    owners = _owners(h for h in hits if h.reference.state is state)
-    if state is RefState.RUNNING:
-        return Reason(code="used-running", message=f"Used by running container(s): {owners}.")
-    if state is RefState.STOPPED:
-        return Reason(code="used-stopped", message=f"Used only by stopped container(s): {owners}.")
-    return Reason(
-        code="defined-only",
-        message=f"Defined in stack/compose file(s) without a container: {owners}.",
-    )
 
 
 def sanity_warnings(
@@ -258,35 +273,42 @@ def sanity_warnings(
     references: Sequence[Reference],
     roots: Sequence[str],
     aliases: Mapping[str, str] | None = None,
-) -> list[str]:
+) -> list[Notice]:
     """Detect setups that would make every folder look orphaned."""
     aliases = aliases or {}
-    warnings: list[str] = []
+    links = symlink_aliases(candidates)
+    warnings: list[Notice] = []
     literal = [apply_aliases(normalize(r.path), aliases) for r in references if r.glob is None]
     for root in (normalize(r) for r in roots):
-        if not any(c.root == root for c in candidates):
+        in_root = [c for c in candidates if c.root == root]
+        if not in_root:
             continue
-        if references and not any(is_under(path, root) for path in literal):
-            warnings.append(
-                f"No reference points into {root}. If containers do use it, the folder is "
-                "probably mounted under a different path than on the host - mount it 1:1 "
-                "(e.g. /opt/appdata:/opt/appdata:ro) or set PATH_ALIASES."
-            )
+        # a symlinked root is reported by Docker under its real path
+        names = {root} | {c.real_path.rsplit("/", 1)[0] for c in in_root if c.real_path}
+        if references and not any(is_under(path, r) for path in literal for r in names):
+            warnings.append(warning("root-unreferenced", root=root))
     for ref in references:
-        if ref.glob is None:
+        if ref.glob is None or ref.alternative:
             continue
-        prepared = _prepare(ref, aliases)
+        prepared = _prepare(ref, aliases, links)
         if any(p.fullmatch(normalize(c.path)) for p in prepared.prefixes for c in candidates):
             continue
-        # Could the unknown part stand for a folder in a scan root?
-        glob = apply_aliases(normalize(ref.glob), aliases)
+        glob = apply_aliases(normalize_glob(ref.glob), aliases)
+        if "*" not in glob:
+            continue
+        # Could the unknown part stand for a folder in a scan root? An invisible
+        # separator stands for "some folder" there.
         tail = glob.split("*", 1)[1]
         for root in (normalize(r) for r in roots):
-            if prepared.full is not None and prepared.full.fullmatch(f"{root}/\u2063{tail}"):
+            probe = f"{root}/\u2063{tail}"
+            if prepared.full is not None and prepared.full.fullmatch(probe):
                 warnings.append(
-                    f"{ref.owner or ref.origin}: {ref.path!r} contains unresolved variables and "
-                    f"may point into {root}, but matches no folder there. Make the variables "
-                    "known to Dustbunny (stack env, .env) so the path can be checked."
+                    warning(
+                        "unresolved-path",
+                        owner=ref.owner or ref.origin or "?",
+                        path=ref.path,
+                        root=root,
+                    )
                 )
                 break
     return warnings
@@ -299,8 +321,10 @@ def build_report(
     roots: Sequence[str],
     sources: Sequence[SourceStatus],
     ignore: Sequence[str] = (),
+    ignored_paths: Collection[str] = (),
     aliases: Mapping[str, str] | None = None,
-    warnings: Sequence[str] = (),
+    warnings: Sequence[Notice] = (),
+    failed_roots: Sequence[str] = (),
 ) -> ScanReport:
     ok_sources = [s.name for s in sources if s.ok]
     folders = classify(
@@ -308,40 +332,36 @@ def build_report(
         references,
         roots=roots,
         ignore=ignore,
+        ignored_paths=ignored_paths,
         aliases=aliases,
         checked_sources=ok_sources,
     )
-    folders.sort(key=lambda f: (list(_CATEGORY_ORDER).index(f.category), f.path))
+    folders.sort(key=lambda f: (CATEGORY_ORDER.index(f.category), f.path))
 
     all_warnings = list(warnings)
     if not sources:
-        all_warnings.append(
-            "No reference source configured - every folder would look orphaned. "
-            "Configure the Docker socket, Portainer or compose directories."
-        )
+        all_warnings.append(warning("no-sources"))
     for status in sources:
         if not status.ok:
-            all_warnings.append(f"Source {status.name!r} failed: {status.error}")
-        all_warnings.extend(f"{status.name}: {w}" for w in status.warnings)
+            all_warnings.append(
+                warning("source-failed", source=status.name, error=status.error or "?")
+            )
+        all_warnings.extend(status.warnings)
     all_warnings.extend(sanity_warnings(candidates, references, roots, aliases))
+
+    unique: dict[tuple[str, str], Notice] = {}
+    for item in all_warnings:
+        unique.setdefault((item.code, item.message), item)
 
     return ScanReport(
         roots=[normalize(r) for r in roots],
-        complete=bool(sources) and all(s.ok for s in sources),
+        complete=bool(sources) and all(s.ok for s in sources) and not failed_roots,
+        uncertain=any(w.code in UNCERTAIN_WARNINGS for w in unique.values()),
         sources=list(sources),
-        warnings=list(dict.fromkeys(all_warnings)),
+        warnings=list(unique.values()),
         summary=summarize(folders),
         folders=folders,
     )
-
-
-_CATEGORY_ORDER = (
-    Category.ORPHAN,
-    Category.DEFINED_ONLY,
-    Category.STOPPED,
-    Category.ACTIVE,
-    Category.IGNORED,
-)
 
 
 def summarize(folders: Iterable[FolderResult]) -> Summary:

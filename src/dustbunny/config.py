@@ -1,4 +1,4 @@
-"""Runtime configuration from environment variables."""
+"""Runtime configuration from environment variables (see README)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 CommaList = Annotated[list[str], NoDecode]
@@ -40,32 +40,34 @@ def split_list(value: object) -> list[str]:
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="", case_sensitive=False, extra="ignore")
 
+    # what to scan
     scan_roots: CommaList = Field(default_factory=list)
     ignore: CommaList = Field(default_factory=list)
-    path_aliases: CommaList = Field(
-        default_factory=list,
-        description="HOST_PATH=LOCAL_PATH pairs for roots that can't be mounted 1:1.",
-    )
+    path_aliases: CommaList = Field(default_factory=list)
     scan_interval: timedelta = timedelta(hours=6)
     scan_sizes: bool = True
 
+    # reference sources
+    docker_enabled: bool = True
     portainer_url: str | None = None
     portainer_api_key: SecretStr | None = None
     portainer_endpoint_id: int | None = None
     portainer_insecure: bool = False
-
     compose_dirs: CommaList = Field(default_factory=list)
 
+    # notifications
     notify_urls: CommaList = Field(default_factory=list)
     notify_on: Literal["change", "always"] = "change"
+    notify_language: str = "en"
 
-    enable_actions: bool = False
-    quarantine_retention_days: int = Field(default=30, ge=0)
-
+    # web server
+    host: str = "0.0.0.0"
+    port: int = Field(default=8080, ge=1, le=65535)
     auth_user: str | None = None
     auth_password: SecretStr | None = None
-
     data_dir: Path = Path("/data")
+    skins_dir: Path | None = None
+    log_level: Literal["debug", "info", "warning", "error"] = "info"
 
     @field_validator(
         "scan_roots", "ignore", "path_aliases", "compose_dirs", "notify_urls", mode="before"
@@ -78,3 +80,44 @@ class Settings(BaseSettings):
     @classmethod
     def _duration(cls, value: object) -> timedelta:
         return parse_duration(value)  # type: ignore[arg-type]
+
+    @field_validator(
+        "portainer_url",
+        "portainer_api_key",
+        "portainer_endpoint_id",
+        "auth_user",
+        "auth_password",
+        "skins_dir",
+        mode="before",
+    )
+    @classmethod
+    def _empty_is_none(cls, value: object) -> object:
+        # docker-compose files often carry `VAR: ""` for unused options
+        return None if isinstance(value, str) and not value.strip() else value
+
+    @field_validator("log_level", "notify_on", mode="before")
+    @classmethod
+    def _lower(cls, value: object) -> object:
+        return value.strip().lower() if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def _pairs_complete(self) -> Settings:
+        # Half a configuration must not silently turn something off: without the
+        # password the UI would be open, without the key stopped stacks unprotected.
+        if bool(self.auth_user) != bool(self.auth_password):
+            raise ValueError("set both AUTH_USER and AUTH_PASSWORD, or neither")
+        if bool(self.portainer_url) != bool(self.portainer_api_key):
+            raise ValueError("set both PORTAINER_URL and PORTAINER_API_KEY, or neither")
+        return self
+
+    @property
+    def portainer_enabled(self) -> bool:
+        return bool(self.portainer_url and self.portainer_api_key)
+
+    @property
+    def auth_enabled(self) -> bool:
+        return bool(self.auth_user and self.auth_password)
+
+    @property
+    def custom_skins_dir(self) -> Path:
+        return self.skins_dir or self.data_dir / "skins"

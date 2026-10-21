@@ -1,0 +1,1 @@
+{"StackFileContent": "services:\n  web:\n    image: ghcr.io/paperless-ngx/paperless-ngx\n    volumes:\n      - /opt/appdata/paperless/data:/usr/src/paperless/data\n      - ${MEDIA_DIR}/paperless:/usr/src/paperless/media\n"}

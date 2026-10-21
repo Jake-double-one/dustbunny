@@ -4,6 +4,7 @@ from pathlib import Path
 
 from dustbunny.collectors import CollectorResult, run_collectors
 from dustbunny.collectors.static import StaticCollector
+from dustbunny.i18n import warning
 from dustbunny.matcher import build_report
 from dustbunny.models import Candidate, Category, RefState
 
@@ -42,7 +43,7 @@ class _Working:
     name = "docker"
 
     def collect(self) -> CollectorResult:
-        return CollectorResult(warnings=["something odd"])
+        return CollectorResult(warnings=[warning("source-failed", source="x", error="y")])
 
 
 def test_failing_collector_does_not_abort_scan() -> None:
@@ -50,4 +51,4 @@ def test_failing_collector_does_not_abort_scan() -> None:
     assert refs == []
     assert [(s.name, s.ok) for s in sources] == [("portainer", False), ("docker", True)]
     assert sources[0].error == "connection refused"
-    assert sources[1].warnings == ["something odd"]
+    assert sources[1].warnings == [warning("source-failed", source="x", error="y")]

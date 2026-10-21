@@ -1,0 +1,79 @@
+# Dustbunny – ready for Portainer stacks (Stacks → Add stack → Web editor or Repository).
+# Paste this file and adjust the lines marked with ← .
+# To build the image from this repo instead: docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+services:
+  dustbunny:
+    image: ghcr.io/jake-double-one/dustbunny:latest
+    container_name: dustbunny
+    restart: unless-stopped
+    depends_on:
+      - socket-proxy
+    ports:
+      - "8077:8080"                        # ← web UI at http://<host>:8077
+    environment:
+      # Your appdata folders, comma-separated. Each one must also be mounted below,
+      # under exactly the same path as on the host.
+      SCAN_ROOTS: "/opt/appdata"           # ←
+      # Docker API through the read-only socket proxy below
+      DOCKER_HOST: "tcp://socket-proxy:2375"
+      SCAN_INTERVAL: "6h"
+      # Folders to skip: names or paths, globs allowed, comma-separated (e.g. "backup-*,/opt/appdata/keep")
+      IGNORE: ""
+      # Portainer: also counts stacks that are stopped (their containers are gone, the data is not).
+      # API key: Portainer → My account → Access tokens. Self-signed certificate: PORTAINER_INSECURE "true".
+      PORTAINER_URL: ""                    # ← e.g. https://192.168.1.10:9443
+      PORTAINER_API_KEY: ""                # ←
+      PORTAINER_ENDPOINT_ID: ""            # only stacks of this environment (see its URL in Portainer)
+      PORTAINER_INSECURE: "false"
+      # Without Portainer (Dockge, Komodo, plain compose): folders with one stack per subfolder.
+      # Mount them below under the same path, e.g. /opt/stacks.
+      COMPOSE_DIRS: ""
+      # Notifications through Apprise, comma-separated, e.g. "ntfy://ntfy.sh/my-topic"
+      NOTIFY_URLS: ""
+      NOTIFY_ON: "change"                  # change | always
+      NOTIFY_LANGUAGE: "en"                # en | de
+      # Password for the web UI (recommended when it can be reached by others)
+      AUTH_USER: ""
+      AUTH_PASSWORD: ""
+    volumes:
+      - /opt/appdata:/opt/appdata:ro       # ← same path left and right, read-only
+      # - /opt/stacks:/opt/stacks:ro       # for COMPOSE_DIRS
+      - dustbunny-data:/data
+      # your own skins: a folder with CSS files (see src/dustbunny/skins/README.md)
+      # - ./my-skins:/data/skins:ro
+    # Read the size of every folder, also of folders that belong to other users:
+    # root without any power except reading (DAC_READ_SEARCH), on read-only mounts.
+    # Remove these two lines to run as uid 1000 – sizes of foreign folders are then incomplete.
+    user: "0:0"
+    cap_add:
+      - DAC_READ_SEARCH
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+
+  # Gives Dustbunny read access to the container and volume lists – nothing else.
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: dustbunny-socket-proxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1
+      VOLUMES: 1
+      # Docker networks are IPv4 by default; without this the proxy fails on hosts without IPv6
+      DISABLE_IPV6: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    read_only: true
+    tmpfs:
+      - /run
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  dustbunny-data:

@@ -22,13 +22,25 @@ _NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _OPERATORS = (":-", ":?", ":+", "-", "?", "+")
 
 
-def interpolate(text: str, env: Mapping[str, str]) -> str:
-    """Substitute variables in ``text``; unknown ones become unresolved markers."""
-    result, _ = _interpolate(text, 0, env, stop_at_brace=False)
+def interpolate(text: str, env: Mapping[str, str], *, defaults: bool = True) -> str:
+    """Substitute variables in ``text``; unknown ones become unresolved markers.
+
+    With ``defaults=False`` an unknown variable stays unknown even when the
+    expression has a default (``${DATA:-/opt}``): it may be set somewhere we
+    can't see. The compose parser reads files both ways and keeps both results.
+    """
+    result, _ = _interpolate(text, 0, env, stop_at_brace=False, defaults=defaults)
     return result
 
 
-def _interpolate(text: str, pos: int, env: Mapping[str, str], *, stop_at_brace: bool):
+def uses_defaults(text: str) -> bool:
+    """Does ``text`` contain ``${VAR:-...}`` or ``${VAR-...}``?"""
+    return re.search(r"\$\{[A-Za-z_][A-Za-z0-9_]*:?-", text) is not None
+
+
+def _interpolate(
+    text: str, pos: int, env: Mapping[str, str], *, stop_at_brace: bool, defaults: bool = True
+):
     out: list[str] = []
     length = len(text)
     while pos < length:
@@ -44,7 +56,7 @@ def _interpolate(text: str, pos: int, env: Mapping[str, str], *, stop_at_brace: 
             out.append("$")
             pos += 2
         elif nxt == "{":
-            value, pos = _braced(text, pos, env)
+            value, pos = _braced(text, pos, env, defaults)
             out.append(value)
         else:
             match = _NAME_RE.match(text, pos + 1)
@@ -58,7 +70,7 @@ def _interpolate(text: str, pos: int, env: Mapping[str, str], *, stop_at_brace: 
     return "".join(out), pos
 
 
-def _braced(text: str, start: int, env: Mapping[str, str]) -> tuple[str, int]:
+def _braced(text: str, start: int, env: Mapping[str, str], defaults: bool) -> tuple[str, int]:
     """Handle ``${...}`` starting at ``text[start] == '$'``. Returns (value, new_pos)."""
     match = _NAME_RE.match(text, start + 2)
     if match is None:
@@ -71,7 +83,9 @@ def _braced(text: str, start: int, env: Mapping[str, str]) -> tuple[str, int]:
     operator = next((op for op in _OPERATORS if text.startswith(op, pos)), None)
     word = ""
     if operator is not None:
-        word, pos = _interpolate(text, pos + len(operator), env, stop_at_brace=True)
+        word, pos = _interpolate(
+            text, pos + len(operator), env, stop_at_brace=True, defaults=defaults
+        )
     if pos >= len(text) or text[pos] != "}":
         # Unterminated: keep the rest literally.
         return text[start:], len(text)
@@ -80,6 +94,8 @@ def _braced(text: str, start: int, env: Mapping[str, str]) -> tuple[str, int]:
 
     is_set = name in env
     value = env.get(name, "")
+    if not is_set and not defaults and operator in (":-", "-"):
+        return mark_unresolved(original), end
     match operator:
         case None:
             return (value if is_set else mark_unresolved(original)), end

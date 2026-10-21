@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="auto">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dustbunny</title>
+<link rel="icon" href="static/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="static/fonts.css">
+<!--skins-->
+<link rel="stylesheet" href="static/app.css">
+<!--boot-->
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">Dust<span>bunny</span></div>
+    <label class="lang">
+      <span class="sr-only" data-i18n="ui.language"></span>
+      <select id="lang" class="pill-select" data-i18n-label="ui.language"></select>
+    </label>
+    <div id="skin-picker" class="swatches" role="radiogroup" data-i18n-label="ui.skin"></div>
+  </header>
+
+  <main id="app"></main>
+  <p id="live" class="sr-only" aria-live="polite"></p>
+
+  <footer><span data-i18n="footer.readonly"></span> <span id="version" class="mono"></span></footer>
+</div>
+<script type="module" src="static/app.js"></script>
+</body>
+</html>

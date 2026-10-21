@@ -25,8 +25,9 @@ from typing import Any
 
 import yaml
 
-from dustbunny.interpolation import interpolate, parse_dotenv
-from dustbunny.models import Reference, RefState
+from dustbunny.i18n import warning
+from dustbunny.interpolation import interpolate, parse_dotenv, uses_defaults
+from dustbunny.models import Notice, Reference, RefState
 from dustbunny.paths import (
     MARK_END,
     MARK_START,
@@ -34,6 +35,7 @@ from dustbunny.paths import (
     has_unresolved,
     mark_unresolved,
     normalize,
+    normalize_glob,
     split_outside_markers,
     to_glob,
 )
@@ -56,7 +58,7 @@ _RAW_PATH_RE = re.compile(
 @dataclass
 class ParseResult:
     references: list[Reference] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
+    warnings: list[Notice] = field(default_factory=list)
     project: str | None = None
 
 
@@ -103,19 +105,28 @@ def parse_compose(
     try:
         document = yaml.load(text, Loader=_LenientLoader)  # SafeLoader subclass
     except yaml.YAMLError as exc:
-        ctx.warn(f"YAML could not be parsed, falling back to raw text scan: {exc}")
+        ctx.warn("compose-invalid-yaml", error=str(exc).splitlines()[0])
         document = None
 
     if document is not None and not isinstance(document, dict):
-        ctx.warn("compose file is not a mapping, falling back to raw text scan")
+        ctx.warn("compose-not-mapping")
         document = None
 
     if document is not None:
-        document = _interpolate_tree(document, env)
-        if isinstance(document.get("name"), str) and not has_unresolved(document["name"]):
-            ctx.project = document["name"]
-            ctx.owner = ctx.owner or document["name"]
-        _extract_structured(document, ctx)
+        resolved = _interpolate_tree(document, env, defaults=True)
+        if isinstance(resolved.get("name"), str) and not has_unresolved(resolved["name"]):
+            ctx.project = resolved["name"]
+            ctx.owner = ctx.owner or resolved["name"]
+        _extract_structured(resolved, ctx)
+        if uses_defaults(text):
+            # A variable with a default may still be set where we can't see it
+            # (shell, Portainer globals): also keep what it would be as unknown.
+            # Only references count from this pass, its warnings would be noise.
+            warnings = list(ctx.warnings)
+            ctx.alternative = True
+            _extract_structured(_interpolate_tree(document, env, defaults=False), ctx)
+            ctx.alternative = False
+            ctx.warnings = warnings
 
     _extract_raw(interpolate(text, env), ctx)
     return ParseResult(references=ctx.references, warnings=ctx.warnings, project=ctx.project)
@@ -186,19 +197,21 @@ class _Context:
     origin: str | None
     state: RefState
     project: str | None = None
+    alternative: bool = False  # adding references of the "variable set elsewhere" pass
     references: list[Reference] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
+    warnings: list[Notice] = field(default_factory=list)
     _seen: set[tuple[str, str]] = field(default_factory=set)
 
-    def warn(self, message: str) -> None:
-        if message not in self.warnings:
-            self.warnings.append(message)
+    def warn(self, code: str, **params: str) -> None:
+        item = warning(code, file=self.origin or self.owner or "compose", **params)
+        if item not in self.warnings:
+            self.warnings.append(item)
 
     def add(self, raw_path: str, kind: str, detail: str | None = None) -> None:
         resolved = self._resolve(raw_path, detail or kind)
         if resolved is None:
             return
-        glob = normalize(to_glob(resolved)) if has_unresolved(resolved) else None
+        glob = normalize_glob(to_glob(resolved)) if has_unresolved(resolved) else None
         shown = display(resolved) if glob else normalize(resolved)
         key = (glob or shown, kind)
         if key in self._seen:
@@ -213,6 +226,7 @@ class _Context:
                 owner=self.owner,
                 origin=_join_origin(self.origin, detail),
                 glob=glob,
+                alternative=self.alternative,
             )
         )
 
@@ -226,9 +240,7 @@ class _Context:
         if value.startswith(("/", MARK_START)):
             return value
         if self.base_dir is None:
-            self.warn(
-                f"relative path {display(value)!r} ({what}) ignored: compose directory unknown"
-            )
+            self.warn("compose-relative-path", path=display(value), detail=what)
             return None
         return posixpath.join(self.base_dir, value)
 
@@ -239,13 +251,13 @@ def _join_origin(origin: str | None, detail: str | None) -> str | None:
     return origin or detail
 
 
-def _interpolate_tree(node: Any, env: Mapping[str, str]) -> Any:
+def _interpolate_tree(node: Any, env: Mapping[str, str], *, defaults: bool) -> Any:
     if isinstance(node, dict):
-        return {key: _interpolate_tree(value, env) for key, value in node.items()}
+        return {key: _interpolate_tree(v, env, defaults=defaults) for key, v in node.items()}
     if isinstance(node, list):
-        return [_interpolate_tree(item, env) for item in node]
+        return [_interpolate_tree(item, env, defaults=defaults) for item in node]
     if isinstance(node, str):
-        return interpolate(node, env)
+        return interpolate(node, env, defaults=defaults)
     return node
 
 
@@ -320,7 +332,7 @@ def _extract_service(name: str, service: dict[str, Any], ctx: _Context) -> None:
             if _looks_like_host_path(src):
                 ctx.add(src, "bind", detail)
             elif has_unresolved(src) and not _strip_markers(src):
-                ctx.warn(f"{detail}: volume source {display(src)!r} could not be resolved")
+                ctx.warn("compose-unresolved-volume", detail=detail, path=display(src))
         elif isinstance(volume, dict):
             src = volume.get("source")
             if volume.get("type") == "bind" and isinstance(src, str):
