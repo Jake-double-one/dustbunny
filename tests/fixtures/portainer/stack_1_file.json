@@ -1,0 +1,1 @@
+{"StackFileContent": "services:\n  sonarr:\n    image: lscr.io/linuxserver/sonarr\n    volumes:\n      - ${APPDATA}/sonarr:/config\n      - ./relative:/data\n"}

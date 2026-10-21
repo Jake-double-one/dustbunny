@@ -1,0 +1,117 @@
+from __future__ import annotations
+
+import base64
+import re
+import time
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from dustbunny.collectors.static import StaticCollector
+from dustbunny.config import Settings
+from dustbunny.server import create_app
+from dustbunny.service import ScanService
+from dustbunny.state import State
+
+
+@pytest.fixture
+def env(tmp_path: Path):
+    root = tmp_path / "appdata"
+    for name in ("used", "old"):
+        (root / name).mkdir(parents=True)
+    refs = tmp_path / "refs.json"
+    refs.write_text(f'[{{"path": "{root}/used", "state": "running", "owner": "app"}}]')
+    return root, refs, tmp_path
+
+
+def make(env, **overrides):
+    root, refs, tmp = env
+    settings = Settings(
+        scan_roots=[str(root)],
+        data_dir=tmp / "data",
+        scan_interval="0",
+        docker_enabled=False,
+        **overrides,
+    )
+    service = ScanService(
+        settings,
+        State(settings.data_dir / "db.sqlite3"),
+        collectors=lambda: [StaticCollector([refs])],
+    )
+    return settings, service
+
+
+def wait_for_report(client: TestClient) -> dict:
+    for _ in range(100):
+        response = client.get("/api/report")
+        if response.status_code == 200 and not client.get("/api/status").json()["scanning"]:
+            return response.json()
+        time.sleep(0.05)
+    raise AssertionError("no report")
+
+
+def test_full_flow(env) -> None:
+    settings, service = make(env)
+    with TestClient(create_app(settings, service)) as client:
+        report = wait_for_report(client)
+        cats = {f["name"]: f["category"] for f in report["folders"]}
+        assert cats == {"used": "active", "old": "orphan"}
+        old = next(f for f in report["folders"] if f["name"] == "old")
+        assert old["first_seen"] is not None
+
+        r = client.post("/api/ignore", json={"path": old["path"], "ignored": True})
+        assert r.status_code == 200
+        folder = next(f for f in r.json()["folders"] if f["name"] == "old")
+        assert folder["category"] == "ignored"
+        assert folder["reasons"][0]["code"] == "ignored-by-user"
+        r = client.post("/api/ignore", json={"path": old["path"], "ignored": False})
+        assert next(f for f in r.json()["folders"] if f["name"] == "old")["category"] == "orphan"
+        assert client.post("/api/ignore", json={"path": "/etc", "ignored": True}).status_code == 404
+
+        assert client.post("/api/scan").status_code == 202
+        status = client.get("/api/status").json()
+        assert status["roots"] == [str(env[0])] and status["config_error"] is None
+
+
+def test_page_assets_and_headers(env) -> None:
+    settings, service = make(env)
+    with TestClient(create_app(settings, service)) as client:
+        page = client.get("/")
+        assert page.status_code == 200
+        assert '<style id="skins">' in page.text and 'id="skin-list"' in page.text
+        ids = re.findall(r'id="([^"]+)"', page.text)
+        assert len(ids) == len(set(ids)), "duplicate element ids"
+        assert 'id="boot"' in page.text and '"code": "de"' in page.text
+        assert "<!--" not in page.text.split("<body>")[0].replace("<!-- ", "")
+        assert "frame-ancestors 'none'" in page.headers["content-security-policy"]
+        assert client.get("/static/app.js").status_code == 200
+        assert client.get("/static/fonts/ibm-plex-mono-latin-400-normal.woff2").status_code == 200
+        assert client.get("/locales/de.json").json()["category.orphan"] == "Verwaist"
+        assert client.get("/locales/xx.json").status_code == 404
+        assert client.get("/locales/..%2fconfig.json").status_code == 404
+        skins = client.get("/api/skins").json()
+        assert [s["id"] for s in skins["skins"]][:2] == ["dark", "amoled"]
+        assert client.get("/api/languages").json()[0] == {"code": "en", "name": "English"}
+
+
+def test_basic_auth(env) -> None:
+    settings, service = make(env, auth_user="admin", auth_password="s3cret")
+    with TestClient(create_app(settings, service)) as client:
+        assert client.get("/healthz").status_code == 200
+        assert client.get("/").status_code == 401
+        assert client.get("/api/report").headers["www-authenticate"].startswith("Basic")
+        bad = base64.b64encode(b"admin:wrong").decode()
+        assert client.get("/", headers={"Authorization": f"Basic {bad}"}).status_code == 401
+        good = base64.b64encode(b"admin:s3cret").decode()
+        assert client.get("/", headers={"Authorization": f"Basic {good}"}).status_code == 200
+
+
+def test_config_error_is_shown_not_fatal(tmp_path: Path) -> None:
+    settings = Settings(data_dir=tmp_path, scan_interval="0", docker_enabled=False)
+    with TestClient(create_app(settings)) as client:
+        status = client.get("/api/status").json()
+        assert "SCAN_ROOTS" in status["config_error"]
+        assert client.get("/api/report").status_code == 404
+        assert client.post("/api/scan").status_code == 409
+        assert client.get("/healthz").json()["status"] == "ok"

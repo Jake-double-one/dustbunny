@@ -32,11 +32,12 @@ def test_settings_from_env(monkeypatch) -> None:
     monkeypatch.setenv("IGNORE", "backup-*,*.old")
     monkeypatch.setenv("SCAN_INTERVAL", "12h")
     monkeypatch.setenv("PORTAINER_API_KEY", "ptr_secret")
-    monkeypatch.setenv("ENABLE_ACTIONS", "false")
+    monkeypatch.setenv("PORTAINER_ENDPOINT_ID", "")
     settings = Settings()
     assert settings.scan_roots == ["/opt/appdata", "/srv/appdata"]
     assert settings.ignore == ["backup-*", "*.old"]
     assert settings.scan_interval == timedelta(hours=12)
     assert settings.portainer_api_key is not None
     assert "ptr_secret" not in repr(settings)
-    assert settings.enable_actions is False
+    assert settings.portainer_endpoint_id is None
+    assert settings.portainer_enabled is False  # no URL

@@ -27,7 +27,9 @@ def test_short_syntax(compose_text) -> None:
 def test_short_syntax_relative_paths_skipped_without_base_dir(compose_text) -> None:
     result = parse_compose(compose_text("short_syntax.yml"))
     assert "/opt/stacks/sonarr/local" not in by_kind(result, "bind")
-    assert any("./local" in w for w in result.warnings)
+    assert any(
+        w.code == "compose-relative-path" and w.params["path"] == "./local" for w in result.warnings
+    )
 
 
 def test_long_syntax(compose_text) -> None:
@@ -61,7 +63,7 @@ def test_env_substitution(compose_text) -> None:
     assert readarr.glob == "*/readarr"
     # A lone unresolved variable may be a volume name: not a path, but warned about.
     assert not any(r.path == "${VOLUME_NAME}" for r in result.references)
-    assert any("VOLUME_NAME" in w for w in result.warnings)
+    assert any(w.code == "compose-unresolved-volume" for w in result.warnings)
     # $$ escapes must not turn into references or unresolved markers.
     assert not any("NOT_A_VAR" in r.path for r in result.references)
 
@@ -98,7 +100,7 @@ def test_extras(compose_text) -> None:
 def test_broken_yaml_falls_back_to_raw_text(compose_text) -> None:
     result = parse_compose(compose_text("broken.yml"))
     assert "/opt/appdata/broken" in by_kind(result, "raw-text")
-    assert any("YAML could not be parsed" in w for w in result.warnings)
+    assert result.warnings[0].code == "compose-invalid-yaml"
 
 
 def test_raw_text_safety_net(compose_text) -> None:

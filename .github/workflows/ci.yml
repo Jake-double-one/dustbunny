@@ -3,24 +3,106 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Tag or branch to build an image from (e.g. v0.1.0)
+        required: true
 
+# a newer push to the same ref replaces a still running build
+concurrency:
+  group: ci-${{ github.ref }}-${{ inputs.ref }}
+  cancel-in-progress: true
+
+# actions are pinned to commits (the tag is the comment) – Dependabot keeps them current
 permissions:
   contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          python-version: ${{ matrix.python-version }}
-          cache: pip
-      - run: pip install -e ".[dev]"
-      - run: ruff check .
-      - run: ruff format --check .
-      - run: pytest
+          ref: ${{ inputs.ref || github.ref }}
+      # ubuntu-latest ships Python 3.12, the version of the image
+      - name: Install
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet -e ".[dev]"
+      - run: .venv/bin/ruff check .
+      - run: .venv/bin/ruff format --check .
+      - run: .venv/bin/pytest
+      - name: Image smoke test
+        run: |
+          docker build -t dustbunny:ci .
+          docker run --rm dustbunny:ci --version
+          mkdir -p /tmp/appdata/orphan
+          docker run --rm -v /tmp/appdata:/tmp/appdata:ro -e SCAN_ROOTS=/tmp/appdata -e DOCKER_ENABLED=false \
+            dustbunny:ci --once --json | grep -q '"category": "orphan"'
+          docker run -d --name smoke -e SCAN_ROOTS=/tmp -e DOCKER_ENABLED=false -p 18080:8080 dustbunny:ci
+          for i in $(seq 1 20); do curl -fsS http://127.0.0.1:18080/healthz && break; sleep 1; done
+          curl -fsS http://127.0.0.1:18080/ | grep -q 'id="skin-list"'
+          docker rm -f smoke
+
+  image:
+    needs: test
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          fetch-depth: 0 # tags, for the version name of main builds
+      - name: Build info
+        id: info
+        env:
+          INPUT_REF: ${{ inputs.ref }}
+        run: |
+          if [ -n "$INPUT_REF" ]; then v="$INPUT_REF"
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then v="$GITHUB_REF_NAME"
+          # main: the last release plus how far ahead, e.g. v0.1.0 or v0.1.0-3-g1a2b3c4
+          else v="$(git describe --tags --match 'v*' 2>/dev/null || echo "0.0.0-$(git rev-parse --short HEAD)")"; fi
+          echo "version=${v#v}" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Image name (registry names must be lowercase)
+        id: name
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/dustbunny" >> "$GITHUB_OUTPUT"
+      - name: Tags
+        id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: ${{ steps.name.outputs.image }}
+          flavor: latest=false
+          # main → latest + sha-…; tag v0.1.0 → 0.1.0, 0.1 and the tag itself; manual run → the given ref
+          tags: |
+            type=raw,value=latest,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+            type=sha,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+            type=semver,pattern={{version}},enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            type=ref,event=tag
+            type=raw,value=${{ inputs.ref }},enable=${{ github.event_name == 'workflow_dispatch' }}
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            APP_VERSION=${{ steps.info.outputs.version }}
+            GIT_SHA=${{ steps.info.outputs.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -8,14 +8,15 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from dustbunny.models import Candidate
+from dustbunny.i18n import warning
+from dustbunny.models import Candidate, Notice
 from dustbunny.paths import normalize
 
 
 @dataclass
 class DiscoveryResult:
     candidates: list[Candidate] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
+    warnings: list[Notice] = field(default_factory=list)
 
 
 def validate_roots(roots: Sequence[str]) -> list[str]:
@@ -44,16 +45,16 @@ def discover(roots: Sequence[str], *, with_stats: bool = True) -> DiscoveryResul
         try:
             root_stat = os.stat(root)
         except OSError as exc:
-            result.warnings.append(f"scan root {root} is not accessible: {exc.strerror}")
+            result.warnings.append(warning("root-missing", root=root, error=exc.strerror))
             continue
         if not stat.S_ISDIR(root_stat.st_mode):
-            result.warnings.append(f"scan root {root} is not a directory")
+            result.warnings.append(warning("root-not-directory", root=root))
             continue
         real_root = os.path.realpath(root)
         try:
             entries = sorted(os.scandir(root), key=lambda e: e.name)
         except OSError as exc:
-            result.warnings.append(f"scan root {root} cannot be listed: {exc.strerror}")
+            result.warnings.append(warning("root-unreadable", root=root, error=exc.strerror))
             continue
         for entry in entries:
             candidate = _candidate(entry, root, real_root, root_stat.st_dev, with_stats)

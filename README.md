@@ -1,120 +1,257 @@
 # Dustbunny
 
-> Finds orphaned Docker appdata folders – the bind-mount directories that stay
-> behind after you delete a stack.
+**Finds orphaned Docker appdata folders – the folders that stay behind after you delete a stack.**
 
-**Status: pre-alpha.** The detection core (compose parser, matcher, CLI) works;
-Docker/Portainer collectors, web UI and notifications are being built.
+🇩🇪 [Deutsche Version](README.de.md)
 
-When you remove a stack in Portainer (or `docker compose down` and delete the
-compose file), its bind mounts – e.g. `/opt/appdata/<stack>` – stay on disk.
-Docker forgets them as soon as the container is gone. Dustbunny lists every
-folder under your appdata roots and tells you which ones nothing uses anymore,
-why it thinks so, and how much space they take.
+<p>
+  <img src="docs/screenshots/dashboard.png" width="520" alt="Dashboard: orphaned size, storage by category, folder list with reasons">
+  <img src="docs/screenshots/phone-dark.png" width="220" alt="The same dashboard on a phone, dark skin, in German">
+</p>
 
-Dustbunny is **read-only by default**. Deleting (via quarantine) will be an
-explicit opt-in feature.
+When you remove a stack in Portainer (or run `docker compose down` and delete the compose file), its
+bind mounts – e.g. `/opt/appdata/<stack>` – stay on disk. Docker forgets them as soon as the container is
+gone. Dustbunny lists every folder in your appdata roots and tells you which ones nothing uses anymore,
+why it thinks so, how big they are and since when they are orphaned.
 
-## How detection works
+**Dustbunny only reads.** It never changes or deletes anything.
 
-* **Candidates** are the direct subfolders of each configured scan root.
-* **References** are host paths that something still uses or defines:
-  container mounts (running *and* stopped), Portainer stack files, local
-  compose files. Compose files are parsed structurally *and* scanned for
-  absolute paths as a safety net.
-* A folder is **referenced** if a reference points at it or anything inside it.
-* A mount of the whole root (or a parent of it) – backup tools, file managers –
-  is shown as *broad access* but does **not** count as usage.
-* Paths with variables Dustbunny can't resolve (`${DATA}/sonarr`) still protect
-  a folder with a matching name.
-* When in doubt, a folder counts as referenced. A missed orphan is harmless;
-  a live folder reported as orphan is not.
+---
 
-| Category       | Meaning                                                    |
-| -------------- | ---------------------------------------------------------- |
-| `active`       | used by a running container                                |
-| `stopped`      | used only by stopped containers                            |
-| `defined-only` | only mentioned in a stack/compose file, no container       |
-| `orphan`       | nothing references it                                      |
-| `ignored`      | ignore rule, symlink, nested scan root or system folder    |
+## Contents
 
-If any reference source fails (e.g. Portainer unreachable) the report is
-marked `complete: false` and orphans in it must not be acted on.
+- [Features](#features)
+- [How it works](#how-it-works)
+- [Install with Docker / Portainer](#install-with-docker--portainer)
+- [Configuration](#configuration)
+- [Sources](#sources)
+- [Notifications](#notifications)
+- [Folder sizes and permissions](#folder-sizes-and-permissions)
+- [Skins](#skins)
+- [Languages](#languages)
+- [API and command line](#api-and-command-line)
+- [Development](#development)
+- [Roadmap](#roadmap)
 
-## Important: mount appdata under the same path
+## Features
 
-Docker reports **host** paths. Mount your appdata roots into the container
-under exactly the same path, otherwise nothing matches:
+| | |
+|---|---|
+| **Finds orphaned folders** | Every folder in your appdata roots is checked against running and stopped containers, Portainer stacks (also stopped ones) and compose files. |
+| **Explains itself** | Each folder shows why it is orphaned or who uses it – container, stack, mount type. |
+| **Size and age** | Disk usage like `du`, last change anywhere in the folder, and "orphaned for 23 days". |
+| **Safe when in doubt** | A folder that might still be used counts as used. If a source fails, the result is marked incomplete and no notification goes out. |
+| **Notifications** | New or resolved orphans via [Apprise](https://github.com/caronc/apprise): ntfy, Discord, e-mail, Telegram, Gotify, … |
+| **Web UI** | Works on the phone, several skins, English and German, ignore a folder with one click. |
+| **Read-only by design** | Read-only mounts, a socket proxy that only allows reading, read-only container file system. |
 
-```yaml
-volumes:
-  - /opt/appdata:/opt/appdata:ro   # correct
-  # - /opt/appdata:/appdata:ro     # wrong: every folder would look orphaned
-```
+## How it works
 
-If that's impossible (symlinked roots, `/mnt/user` vs. `/mnt/cache` …) set
-`PATH_ALIASES=/host/path=/container/path`.
+- **Folders:** every direct subfolder of a scan root (`/opt/appdata/sonarr`, `/opt/appdata/radarr`, …).
+- **References:** every host path that something still uses or defines:
+  - container mounts from the Docker API – running **and** stopped containers, including named volumes
+    that are bound to a host folder (`driver_opts.device`);
+  - Portainer stacks – important because a stopped stack has no containers, but needs its data;
+  - compose files in folders you name (Dockge, Komodo, plain compose).
+  Compose files are read properly (short and long volume syntax, named volumes, `env_file`, `secrets`,
+  `configs`, `include`, variables from the stack environment or `.env`) and also searched for any absolute
+  path as a safety net.
+- A folder is **in use** if a reference points at it or at anything inside it.
+- A mount of the whole scan root (or a parent of it) – backup tools, file managers – is shown as
+  *mounts the whole scan root*, but does **not** count as use. Otherwise it would hide every orphan.
+- Paths with a variable Dustbunny can't resolve (`${DATA}/sonarr`) still protect a folder with that name.
 
-## Try it (CLI)
+| Category | Meaning |
+|---|---|
+| **Active** | used by a running container |
+| **Stopped** | used only by stopped containers |
+| **Defined only** | still in a stack or compose file, but no container exists |
+| **Orphaned** | nothing references it |
+| **Ignored** | ignore rule, ignored in the web UI, symbolic link or system folder (`lost+found`, `@eaDir`, …) |
+
+When in doubt, a folder counts as used: a missed orphan costs a little disk space, a live folder shown as
+orphaned could cost data.
+
+## Install with Docker / Portainer
+
+The image is published for `amd64` and `arm64`: `ghcr.io/jake-double-one/dustbunny:latest`.
+
+**Portainer:** *Stacks → Add stack → Web editor*, paste [`docker-compose.yml`](docker-compose.yml), adjust
+the lines marked with `←`, *Deploy the stack*. Or choose *Repository* with
+`https://github.com/Jake-double-one/dustbunny` and the compose path `docker-compose.yml`.
+
+**Command line:**
 
 ```sh
-pip install -e ".[dev]"
-dustbunny --once --root /opt/appdata --compose /opt/stacks/media/compose.yaml
-dustbunny --once --json --root /opt/appdata --references refs.json > report.json
+curl -O https://raw.githubusercontent.com/Jake-double-one/dustbunny/main/docker-compose.yml
+# adjust SCAN_ROOTS and the volume lines, then:
+docker compose up -d
 ```
 
-## Web UI (prototype)
+Open `http://<host>:8077`. The first scan starts right away.
 
-`web/` holds the dashboard. Until the API exists, it falls back to demo data:
+> [!IMPORTANT]
+> **Mount your appdata under exactly the same path as on the host.** Docker reports host paths, so
+> `/opt/appdata` must be `/opt/appdata` inside the container too:
+>
+> ```yaml
+> volumes:
+>   - /opt/appdata:/opt/appdata:ro   # right
+>   # - /opt/appdata:/appdata:ro     # wrong: every folder would look orphaned
+> ```
+>
+> If that's not possible (e.g. Unraid `/mnt/user` vs. `/mnt/cache`, or a symlinked folder), set
+> `PATH_ALIASES=/host/path=/container/path`. Dustbunny warns when nothing points into a scan root.
 
-```sh
-cd web && python -m http.server 8000   # open http://localhost:8000
-python scripts/demo_report.py > web/demo/report.json   # regenerate demo data
-```
+The compose file contains two services:
 
-Design: see [docs/design.md](docs/design.md).
+- **dustbunny** – runs as root *without any capability except reading* (`DAC_READ_SEARCH`), with a read-only
+  file system, read-only appdata mounts and `no-new-privileges`. See
+  [Folder sizes and permissions](#folder-sizes-and-permissions).
+- **socket-proxy** ([tecnativa/docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy)) –
+  lets Dustbunny list containers and volumes, nothing else. Dustbunny never sees the Docker socket itself.
 
 ## Configuration
 
-| Variable                    | Default  | Description                                         |
-| --------------------------- | -------- | --------------------------------------------------- |
-| `SCAN_ROOTS`                | –        | **Required.** Comma-separated appdata roots         |
-| `IGNORE`                    |          | Comma-separated globs (folder name or full path)    |
-| `PATH_ALIASES`              |          | `HOST=LOCAL` path translations, comma-separated     |
-| `SCAN_INTERVAL`             | `6h`     | e.g. `30m`, `6h`, `1d`                              |
-| `SCAN_SIZES`                | `true`   | Calculate folder size and last change               |
-| `PORTAINER_URL`             |          | e.g. `https://portainer:9443`                       |
-| `PORTAINER_API_KEY`         |          | Portainer access token (read access is enough)      |
-| `PORTAINER_ENDPOINT_ID`     |          | Only consider stacks of this environment            |
-| `PORTAINER_INSECURE`        | `false`  | Skip TLS verification                               |
-| `COMPOSE_DIRS`              |          | Folders with compose stacks (Dockge, Komodo, …)     |
-| `NOTIFY_URLS`               |          | Apprise URLs                                        |
-| `NOTIFY_ON`                 | `change` | `change` or `always`                                |
-| `ENABLE_ACTIONS`            | `false`  | Allow quarantine/delete (phase 2)                   |
-| `QUARANTINE_RETENTION_DAYS` | `30`     | Purge quarantined folders after N days              |
-| `AUTH_USER`/`AUTH_PASSWORD` |          | Protect the web UI                                  |
-| `DATA_DIR`                  | `/data`  | State database                                      |
+All settings are environment variables.
 
-Not all of them are wired up yet – see the roadmap.
+| Variable | Default | Description |
+|---|---|---|
+| `SCAN_ROOTS` | – | **Required.** Appdata folders, comma-separated. Mount each under the same path. |
+| `IGNORE` | | Folders to skip: names or paths, globs allowed, comma-separated (`backup-*,/opt/appdata/keep`) |
+| `PATH_ALIASES` | | `HOST=LOCAL` path translations, comma-separated |
+| `SCAN_INTERVAL` | `6h` | `30m`, `6h`, `1d` … `0` = only when you click *Scan now* |
+| `SCAN_SIZES` | `true` | Calculate size and last change (reads every file's metadata) |
+| `DOCKER_ENABLED` | `true` | Ask the Docker API |
+| `DOCKER_HOST` | local socket | e.g. `tcp://socket-proxy:2375` |
+| `PORTAINER_URL` | | e.g. `https://192.168.1.10:9443` |
+| `PORTAINER_API_KEY` | | Portainer → *My account* → *Access tokens* |
+| `PORTAINER_ENDPOINT_ID` | | Only stacks of this environment (the number in its Portainer URL) |
+| `PORTAINER_INSECURE` | `false` | Accept a self-signed certificate |
+| `COMPOSE_DIRS` | | Folders with one stack per subfolder, comma-separated |
+| `NOTIFY_URLS` | | Apprise URLs, comma-separated |
+| `NOTIFY_ON` | `change` | `change`: new or resolved orphans · `always`: after every scan |
+| `NOTIFY_LANGUAGE` | `en` | Language of notifications (`en`, `de`, …) |
+| `AUTH_USER` / `AUTH_PASSWORD` | | Password for the web UI (Basic Auth). Recommended if others can reach it. |
+| `PORT` | `8080` | Port inside the container |
+| `DATA_DIR` | `/data` | State (SQLite) and your own skins |
+| `SKINS_DIR` | `$DATA_DIR/skins` | Folder for your own skins |
+| `LOG_LEVEL` | `info` | `debug`, `info`, `warning`, `error` |
 
-## Roadmap
+## Sources
 
-1. ✅ Compose parser
-2. ✅ Matcher, report model, `--once --json` CLI
-3. Docker socket collector
-4. Portainer collector
-5. State (first seen, diff) + notifications
-6. Web UI + API (UI prototype with demo data ✅)
-7. Docker image, compose example, release workflow
-8. Quarantine / delete (opt-in)
+### Docker
+
+All containers are read, running and stopped: bind mounts, named volumes bound to a host folder, and the
+compose labels (project folder and compose files). The socket proxy needs `CONTAINERS=1` and `VOLUMES=1`.
+Without `VOLUMES=1`, Dustbunny can't see which folder a named volume uses and marks the result incomplete.
+
+### Portainer
+
+Needed when you stop stacks in Portainer: Portainer removes their containers, so only the stack file still
+says that the data is needed. Dustbunny reads every stack file with its environment variables. Create an
+access token under *My account → Access tokens*; a user that can see the stacks is enough.
+
+- Several environments (hosts) in one Portainer: set `PORTAINER_ENDPOINT_ID` to the one Dustbunny runs on,
+  otherwise stacks of other hosts protect folders with the same path here.
+- Relative paths in Portainer stacks point into Portainer's own data folder and are skipped.
+- Stacks with additional compose files: only the main file is read (shown as a hint).
+
+### Compose folders
+
+For Dockge, Komodo or plain `docker compose`: `COMPOSE_DIRS=/opt/stacks` reads compose files directly in
+that folder and in each subfolder (`/opt/stacks/<stack>/compose.yaml`, `.env` included). Mount the folder
+under the same path, so relative paths (`./config`) resolve correctly.
+
+## Notifications
+
+Set `NOTIFY_URLS` to one or more [Apprise URLs](https://github.com/caronc/apprise/wiki), for example
+`ntfy://ntfy.sh/my-topic`, `discord://webhook_id/webhook_token`, `tgram://bot_token/chat_id`,
+`mailtos://user:password@example.com`. A message lists newly orphaned folders with their size and folders
+that are no longer orphaned. Incomplete results never notify.
+
+## Folder sizes and permissions
+
+Appdata folders often belong to different users and are not readable for others (`700`). Two ways:
+
+- **Default in `docker-compose.yml`:** `user: "0:0"` with `cap_drop: ALL` and only `cap_add:
+  DAC_READ_SEARCH`. This root can read every file but cannot write anywhere except `/data` – the appdata
+  mounts and the container file system are read-only.
+- **Without root:** remove the `user` and `cap_add` lines. Dustbunny runs as uid 1000 and reads what that
+  user may read (folders of most linuxserver.io images use uid 1000). Sizes of other folders are marked as
+  incomplete; detection itself is not affected.
+
+## Skins
+
+Pick a skin with the swatches at the top right; the choice is saved in the browser. Built in: *Dark*,
+*AMOLED*, *Light*, *Mango*. Until you pick one, the light or dark skin follows your system.
+
+Your own skin: put a CSS file into `/data/skins` (or mount a folder there) – it shows up within seconds,
+no restart needed. The format, shared with ShopWiz and the Feierabend design system, is described in
+[`src/dustbunny/skins/README.md`](src/dustbunny/skins/README.md).
+
+## Languages
+
+The web UI and notifications speak English and German. The browser language decides; you can switch at the
+top right.
+
+**Adding a language:** copy [`src/dustbunny/locales/en.json`](src/dustbunny/locales/en.json) to
+`<code>.json` (e.g. `fr.json`), translate the values and set `language.name`. It appears in the language
+menu automatically. `pytest` checks that the file has every key and the same `{placeholders}`. Keys ending in
+`_one` / `_other` are plural forms; languages with more forms can add `_few`, `_many`, … (as in
+`Intl.PluralRules`). The terms are explained in [`docs/glossary.md`](docs/glossary.md).
+
+## API and command line
+
+| Endpoint | |
+|---|---|
+| `GET /api/report` | The last report as JSON (folders, categories, reasons, references, sources) |
+| `GET /api/status` | Scan state, last and next scan, configuration problems |
+| `POST /api/scan` | Start a scan |
+| `POST /api/ignore` | `{"path": "/opt/appdata/x", "ignored": true}` |
+| `GET /healthz` | Health check (no password needed) |
+
+Reasons and warnings come with a `code`, `params` and an English `message`.
+
+A single scan without the web server, e.g. for scripts:
+
+```sh
+docker run --rm -v /opt/appdata:/opt/appdata:ro -v /var/run/docker.sock:/var/run/docker.sock:ro \
+  -e SCAN_ROOTS=/opt/appdata --user 0:0 ghcr.io/jake-double-one/dustbunny --once --json
+```
 
 ## Development
 
 ```sh
-pip install -e ".[dev]"
-ruff check . && ruff format --check . && pytest
+python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
+.venv/bin/ruff check . && .venv/bin/ruff format --check . && .venv/bin/pytest
+SCAN_ROOTS=/opt/appdata .venv/bin/dustbunny          # web UI on http://localhost:8080
 ```
+
+`http://localhost:8080/?demo` shows demo data (`scripts/demo_report.py` creates it).
+
+```
+src/dustbunny/
+  collectors/      docker_socket.py, portainer.py, compose_files.py – where references come from
+  compose_parser.py, interpolation.py   reading compose files and ${VARIABLES}
+  matcher.py       which folder is used by what – the core rules
+  scanner.py       folders, sizes, ages
+  state.py         SQLite: orphaned since, ignored folders, last report
+  notify.py        Apprise
+  server.py        FastAPI: API, web UI, scheduled scans
+  locales/         one JSON file per language
+  skins/           one CSS file per skin
+  web/             the web UI (no build step)
+docs/              design, glossary, screenshots
+```
+
+## Roadmap
+
+- Quarantine and delete orphaned folders – opt-in, with a dry run, a fresh check right before acting and an
+  audit log. Not in this version: Dustbunny only reads.
+- Prometheus `/metrics`, a Homepage / Homarr widget.
+- Several Portainer environments in one view, unused Docker volumes.
 
 ## License
 
-MIT
+MIT. Fonts: IBM Plex Mono and Instrument Sans, SIL Open Font License (see `src/dustbunny/web/static/fonts`).

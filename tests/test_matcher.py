@@ -173,7 +173,8 @@ def test_vague_pattern_protects_nothing_but_warns() -> None:
     results = classify(candidates, [vague], roots=[ROOT])
     assert all(r.category is Category.ORPHAN for r in results)
     report = build_report(candidates, [vague], roots=[ROOT], sources=[SourceStatus(name="test")])
-    assert any("unresolved variables" in w for w in report.warnings)
+    unresolved = [w for w in report.warnings if w.code == "unresolved-path"]
+    assert unresolved and unresolved[0].params["owner"] == "s"
 
 
 def test_pattern_with_literal_head_outside_roots_does_not_warn() -> None:
@@ -227,13 +228,14 @@ def test_report_incomplete_when_source_failed() -> None:
     )
     assert not report.complete
     assert report.folders[0].checked_sources == []
-    assert any("portainer" in w and "timeout" in w for w in report.warnings)
+    assert report.warnings[0].code == "source-failed"
+    assert report.warnings[0].params == {"source": "portainer", "error": "timeout"}
 
 
 def test_report_incomplete_without_sources() -> None:
     report = build_report([cand("x")], [], roots=[ROOT], sources=[])
     assert not report.complete
-    assert any("No reference source" in w for w in report.warnings)
+    assert [w.code for w in report.warnings] == ["no-sources"]
 
 
 def test_warns_when_no_reference_points_into_root() -> None:
@@ -245,4 +247,5 @@ def test_warns_when_no_reference_points_into_root() -> None:
         sources=[SourceStatus(name="docker")],
     )
     assert report.folders[0].category is Category.ORPHAN
-    assert any("mounted under a different path" in w for w in report.warnings)
+    assert [w.code for w in report.warnings] == ["root-unreferenced"]
+    assert "PATH_ALIASES" in report.warnings[0].message

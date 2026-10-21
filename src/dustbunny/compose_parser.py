@@ -25,8 +25,9 @@ from typing import Any
 
 import yaml
 
+from dustbunny.i18n import warning
 from dustbunny.interpolation import interpolate, parse_dotenv
-from dustbunny.models import Reference, RefState
+from dustbunny.models import Notice, Reference, RefState
 from dustbunny.paths import (
     MARK_END,
     MARK_START,
@@ -56,7 +57,7 @@ _RAW_PATH_RE = re.compile(
 @dataclass
 class ParseResult:
     references: list[Reference] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
+    warnings: list[Notice] = field(default_factory=list)
     project: str | None = None
 
 
@@ -103,11 +104,11 @@ def parse_compose(
     try:
         document = yaml.load(text, Loader=_LenientLoader)  # SafeLoader subclass
     except yaml.YAMLError as exc:
-        ctx.warn(f"YAML could not be parsed, falling back to raw text scan: {exc}")
+        ctx.warn("compose-invalid-yaml", error=str(exc).splitlines()[0])
         document = None
 
     if document is not None and not isinstance(document, dict):
-        ctx.warn("compose file is not a mapping, falling back to raw text scan")
+        ctx.warn("compose-not-mapping")
         document = None
 
     if document is not None:
@@ -187,12 +188,13 @@ class _Context:
     state: RefState
     project: str | None = None
     references: list[Reference] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
+    warnings: list[Notice] = field(default_factory=list)
     _seen: set[tuple[str, str]] = field(default_factory=set)
 
-    def warn(self, message: str) -> None:
-        if message not in self.warnings:
-            self.warnings.append(message)
+    def warn(self, code: str, **params: str) -> None:
+        item = warning(code, file=self.origin or self.owner or "compose", **params)
+        if item not in self.warnings:
+            self.warnings.append(item)
 
     def add(self, raw_path: str, kind: str, detail: str | None = None) -> None:
         resolved = self._resolve(raw_path, detail or kind)
@@ -226,9 +228,7 @@ class _Context:
         if value.startswith(("/", MARK_START)):
             return value
         if self.base_dir is None:
-            self.warn(
-                f"relative path {display(value)!r} ({what}) ignored: compose directory unknown"
-            )
+            self.warn("compose-relative-path", path=display(value), detail=what)
             return None
         return posixpath.join(self.base_dir, value)
 
@@ -320,7 +320,7 @@ def _extract_service(name: str, service: dict[str, Any], ctx: _Context) -> None:
             if _looks_like_host_path(src):
                 ctx.add(src, "bind", detail)
             elif has_unresolved(src) and not _strip_markers(src):
-                ctx.warn(f"{detail}: volume source {display(src)!r} could not be resolved")
+                ctx.warn("compose-unresolved-volume", detail=detail, path=display(src))
         elif isinstance(volume, dict):
             src = volume.get("source")
             if volume.get("type") == "bind" and isinstance(src, str):

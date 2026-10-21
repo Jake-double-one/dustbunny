@@ -22,7 +22,15 @@
     }
   ],
   "warnings": [
-    "monitoring: '${DATA}/grafana' contains unresolved variables and may point into /opt/appdata, but matches no folder there. Make the variables known to Dustbunny (stack env, .env) so the path can be checked."
+    {
+      "code": "unresolved-path",
+      "message": "monitoring: ${DATA}/grafana contains unknown variables and may point into /opt/appdata, but matches no folder there. Make the variables known (stack environment, .env) so the path can be checked.",
+      "params": {
+        "owner": "monitoring",
+        "path": "${DATA}/grafana",
+        "root": "/opt/appdata"
+      }
+    }
   ],
   "summary": {
     "total": 10,
@@ -45,11 +53,15 @@
       "reasons": [
         {
           "code": "no-reference",
-          "message": "Nothing references this folder or anything inside it."
+          "message": "Nothing references this folder or anything inside it.",
+          "params": {}
         },
         {
           "code": "broad-access-only",
-          "message": "Only broad mounts of the whole root cover it (duplicati); these don't count as usage."
+          "message": "Only duplicati sees it, because the whole scan root is mounted there. That doesn't count as use.",
+          "params": {
+            "owners": "duplicati"
+          }
         }
       ],
       "protected_by": [],
@@ -87,11 +99,15 @@
       "reasons": [
         {
           "code": "no-reference",
-          "message": "Nothing references this folder or anything inside it."
+          "message": "Nothing references this folder or anything inside it.",
+          "params": {}
         },
         {
           "code": "broad-access-only",
-          "message": "Only broad mounts of the whole root cover it (duplicati); these don't count as usage."
+          "message": "Only duplicati sees it, because the whole scan root is mounted there. That doesn't count as use.",
+          "params": {
+            "owners": "duplicati"
+          }
         }
       ],
       "protected_by": [],
@@ -129,11 +145,15 @@
       "reasons": [
         {
           "code": "no-reference",
-          "message": "Nothing references this folder or anything inside it."
+          "message": "Nothing references this folder or anything inside it.",
+          "params": {}
         },
         {
           "code": "broad-access-only",
-          "message": "Only broad mounts of the whole root cover it (duplicati); these don't count as usage."
+          "message": "Only duplicati sees it, because the whole scan root is mounted there. That doesn't count as use.",
+          "params": {
+            "owners": "duplicati"
+          }
         }
       ],
       "protected_by": [],
@@ -171,7 +191,10 @@
       "reasons": [
         {
           "code": "defined-only",
-          "message": "Defined in stack/compose file(s) without a container: paperless."
+          "message": "Still in a stack or compose file, but no container exists: paperless.",
+          "params": {
+            "owners": "paperless"
+          }
         }
       ],
       "protected_by": [
@@ -236,7 +259,10 @@
       "reasons": [
         {
           "code": "used-stopped",
-          "message": "Used only by stopped container(s): nextcloud-app, nextcloud-db."
+          "message": "Only used by stopped containers: nextcloud-app, nextcloud-db.",
+          "params": {
+            "owners": "nextcloud-app, nextcloud-db"
+          }
         }
       ],
       "protected_by": [
@@ -314,7 +340,10 @@
       "reasons": [
         {
           "code": "used-running",
-          "message": "Used by running container(s): jellyfin."
+          "message": "Used by running containers: jellyfin.",
+          "params": {
+            "owners": "jellyfin"
+          }
         }
       ],
       "protected_by": [
@@ -379,7 +408,10 @@
       "reasons": [
         {
           "code": "used-running",
-          "message": "Used by running container(s): radarr."
+          "message": "Used by running containers: radarr.",
+          "params": {
+            "owners": "radarr"
+          }
         }
       ],
       "protected_by": [
@@ -431,7 +463,10 @@
       "reasons": [
         {
           "code": "used-running",
-          "message": "Used by running container(s): sonarr."
+          "message": "Used by running containers: sonarr.",
+          "params": {
+            "owners": "sonarr"
+          }
         }
       ],
       "protected_by": [
@@ -483,7 +518,10 @@
       "reasons": [
         {
           "code": "ignore-rule",
-          "message": "Matches ignore rule 'backup-*'."
+          "message": "Matches the ignore rule backup-*.",
+          "params": {
+            "rule": "backup-*"
+          }
         }
       ],
       "protected_by": [],
@@ -521,7 +559,10 @@
       "reasons": [
         {
           "code": "builtin-ignore",
-          "message": "Built-in ignore rule 'lost+found'."
+          "message": "System folder, always skipped (lost+found).",
+          "params": {
+            "rule": "lost+found"
+          }
         }
       ],
       "protected_by": [],

@@ -19,6 +19,8 @@ class RefState(StrEnum):
 
 
 class Category(StrEnum):
+    """Folder categories. UI labels: see ``category.*`` in ``locales/*.json``."""
+
     ACTIVE = "active"
     STOPPED = "stopped"
     DEFINED_ONLY = "defined-only"
@@ -65,9 +67,13 @@ class Candidate(BaseModel):
     stats_complete: bool = True
 
 
-class Reason(BaseModel):
+class Notice(BaseModel):
+    """A reason or warning. ``code`` + ``params`` are for translation (see
+    ``locales/*.json``), ``message`` is the English text for API and CLI users."""
+
     code: str
     message: str
+    params: dict[str, str] = Field(default_factory=dict)
 
 
 class ReferenceHit(BaseModel):
@@ -81,7 +87,7 @@ class FolderResult(BaseModel):
     root: str
     name: str
     category: Category
-    reasons: list[Reason] = Field(default_factory=list)
+    reasons: list[Notice] = Field(default_factory=list)
     protected_by: list[ReferenceHit] = Field(default_factory=list)
     broad_access: list[ReferenceHit] = Field(default_factory=list)
     checked_sources: list[str] = Field(default_factory=list)
@@ -91,7 +97,7 @@ class FolderResult(BaseModel):
     is_symlink: bool = False
     is_mountpoint: bool = False
     first_seen: datetime | None = Field(
-        default=None, description="When Dustbunny first saw this folder as orphan (needs state)."
+        default=None, description="When Dustbunny first saw this folder orphaned."
     )
 
 
@@ -100,7 +106,7 @@ class SourceStatus(BaseModel):
     ok: bool = True
     error: str | None = None
     reference_count: int = 0
-    warnings: list[str] = Field(default_factory=list)
+    warnings: list[Notice] = Field(default_factory=list)
 
 
 class Summary(BaseModel):
@@ -119,6 +125,6 @@ class ScanReport(BaseModel):
         "Orphans in an incomplete report must not trigger notifications or actions."
     )
     sources: list[SourceStatus]
-    warnings: list[str] = Field(default_factory=list)
+    warnings: list[Notice] = Field(default_factory=list)
     summary: Summary
     folders: list[FolderResult]

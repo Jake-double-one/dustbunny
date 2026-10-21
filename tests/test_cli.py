@@ -62,7 +62,7 @@ def test_roots_and_ignore_from_env(setup, capsys, monkeypatch) -> None:
     categories = {f["name"]: f["category"] for f in report["folders"]}
     assert categories["old-app"] == "ignored"
     assert all(f["size_bytes"] is None for f in report["folders"])
-    assert any("/nonexistent" in w for w in report["warnings"])
+    assert any(w["params"].get("root") == "/nonexistent" for w in report["warnings"])
 
 
 def test_text_output_and_output_file(setup, capsys) -> None:
@@ -70,13 +70,14 @@ def test_text_output_and_output_file(setup, capsys) -> None:
     assert main(["--once", "--root", str(setup["root"]), "-o", str(out)]) == 0
     text = out.read_text()
     assert "orphan" in text
-    assert "report is incomplete" in text  # no sources configured
+    assert "incomplete result" in text  # no sources configured
 
 
-def test_requires_once(capsys) -> None:
-    with pytest.raises(SystemExit) as exc:
-        main([])
-    assert exc.value.code == 2
+def test_without_once_starts_the_server(monkeypatch) -> None:
+    started = []
+    monkeypatch.setattr("dustbunny.server.serve", lambda settings: started.append(settings))
+    assert main([]) == 0
+    assert len(started) == 1
 
 
 def test_missing_roots_is_an_error(capsys, monkeypatch) -> None:
