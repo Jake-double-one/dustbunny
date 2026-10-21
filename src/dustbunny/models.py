@@ -61,6 +61,7 @@ class Candidate(BaseModel):
     name: str
     real_path: str | None = None
     is_symlink: bool = False
+    link_target: str | None = Field(default=None, description="Where a symlink points to.")
     is_mountpoint: bool = False
     size_bytes: int | None = None
     last_modified: datetime | None = None
@@ -121,10 +122,20 @@ class ScanReport(BaseModel):
     generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     roots: list[str]
     complete: bool = Field(
-        description="False if any reference source failed or none was configured. "
-        "Orphans in an incomplete report must not trigger notifications or actions."
+        description="False if a reference source failed, none was configured or a scan "
+        "root could not be read."
+    )
+    uncertain: bool = Field(
+        default=False,
+        description="True if some paths could not be checked fully (unknown variables, "
+        "unreadable compose files). See the warnings.",
     )
     sources: list[SourceStatus]
     warnings: list[Notice] = Field(default_factory=list)
     summary: Summary
     folders: list[FolderResult]
+
+    @property
+    def reliable(self) -> bool:
+        """Only a reliable report may notify or change what Dustbunny remembers."""
+        return self.complete and not self.uncertain

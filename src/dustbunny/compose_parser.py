@@ -26,7 +26,7 @@ from typing import Any
 import yaml
 
 from dustbunny.i18n import warning
-from dustbunny.interpolation import interpolate, parse_dotenv
+from dustbunny.interpolation import interpolate, parse_dotenv, uses_defaults
 from dustbunny.models import Notice, Reference, RefState
 from dustbunny.paths import (
     MARK_END,
@@ -35,6 +35,7 @@ from dustbunny.paths import (
     has_unresolved,
     mark_unresolved,
     normalize,
+    normalize_glob,
     split_outside_markers,
     to_glob,
 )
@@ -112,11 +113,18 @@ def parse_compose(
         document = None
 
     if document is not None:
-        document = _interpolate_tree(document, env)
-        if isinstance(document.get("name"), str) and not has_unresolved(document["name"]):
-            ctx.project = document["name"]
-            ctx.owner = ctx.owner or document["name"]
-        _extract_structured(document, ctx)
+        resolved = _interpolate_tree(document, env, defaults=True)
+        if isinstance(resolved.get("name"), str) and not has_unresolved(resolved["name"]):
+            ctx.project = resolved["name"]
+            ctx.owner = ctx.owner or resolved["name"]
+        _extract_structured(resolved, ctx)
+        if uses_defaults(text):
+            # A variable with a default may still be set where we can't see it
+            # (shell, Portainer globals): also keep what it would be as unknown.
+            # Only references count from this pass, its warnings would be noise.
+            warnings = list(ctx.warnings)
+            _extract_structured(_interpolate_tree(document, env, defaults=False), ctx)
+            ctx.warnings = warnings
 
     _extract_raw(interpolate(text, env), ctx)
     return ParseResult(references=ctx.references, warnings=ctx.warnings, project=ctx.project)
@@ -200,7 +208,7 @@ class _Context:
         resolved = self._resolve(raw_path, detail or kind)
         if resolved is None:
             return
-        glob = normalize(to_glob(resolved)) if has_unresolved(resolved) else None
+        glob = normalize_glob(to_glob(resolved)) if has_unresolved(resolved) else None
         shown = display(resolved) if glob else normalize(resolved)
         key = (glob or shown, kind)
         if key in self._seen:
@@ -239,13 +247,13 @@ def _join_origin(origin: str | None, detail: str | None) -> str | None:
     return origin or detail
 
 
-def _interpolate_tree(node: Any, env: Mapping[str, str]) -> Any:
+def _interpolate_tree(node: Any, env: Mapping[str, str], *, defaults: bool) -> Any:
     if isinstance(node, dict):
-        return {key: _interpolate_tree(value, env) for key, value in node.items()}
+        return {key: _interpolate_tree(v, env, defaults=defaults) for key, v in node.items()}
     if isinstance(node, list):
-        return [_interpolate_tree(item, env) for item in node]
+        return [_interpolate_tree(item, env, defaults=defaults) for item in node]
     if isinstance(node, str):
-        return interpolate(node, env)
+        return interpolate(node, env, defaults=defaults)
     return node
 
 

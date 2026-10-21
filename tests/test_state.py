@@ -72,3 +72,8 @@ def test_ignores_and_report_roundtrip(tmp_path: Path) -> None:
     rep = report(["x"])
     state.save_report(rep)
     assert State(tmp_path / "db.sqlite3").load_report() == rep
+
+
+def test_database_is_group_writable(tmp_path: Path) -> None:
+    State(tmp_path / "db.sqlite3")
+    assert (tmp_path / "db.sqlite3").stat().st_mode & 0o060 == 0o060

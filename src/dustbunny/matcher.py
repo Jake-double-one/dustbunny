@@ -34,7 +34,7 @@ from dustbunny.models import (
     SourceStatus,
     Summary,
 )
-from dustbunny.paths import apply_aliases, is_same_or_under, is_under, normalize
+from dustbunny.paths import apply_aliases, is_same_or_under, is_under, normalize, normalize_glob
 
 # Folders that are never app data. Matched against the folder name.
 BUILTIN_IGNORE = (
@@ -52,6 +52,18 @@ CATEGORY_ORDER = (
     Category.STOPPED,
     Category.ACTIVE,
     Category.IGNORED,
+)
+
+# Warnings that mean "some references may be missing": such a report must not
+# notify or change what Dustbunny remembers (see ScanReport.reliable).
+UNCERTAIN_WARNINGS = frozenset(
+    {
+        "unresolved-path",
+        "compose-invalid-yaml",
+        "compose-not-mapping",
+        "compose-unresolved-volume",
+        "portainer-additional-files",
+    }
 )
 
 _STATE_RANK = {RefState.RUNNING: 0, RefState.STOPPED: 1, RefState.DEFINED: 2}
@@ -76,10 +88,16 @@ class _PreparedRef:
     exact: re.Pattern[str] | None = None  # full pattern, if it ends in a literal segment
 
 
-def _prepare(ref: Reference, aliases: Mapping[str, str]) -> _PreparedRef:
+def _prepare(
+    ref: Reference, aliases: Mapping[str, str], links: Mapping[str, str] | None = None
+) -> _PreparedRef:
+    """``aliases`` translate host paths (PATH_ALIASES), ``links`` map symlinks
+    inside a scan root to their targets, so a mount of the link protects the target."""
+    links = links or {}
     if ref.glob is None:
-        return _PreparedRef(ref=ref, path=apply_aliases(normalize(ref.path), aliases))
-    glob = apply_aliases(normalize(ref.glob), aliases)
+        path = apply_aliases(apply_aliases(normalize(ref.path), aliases), links)
+        return _PreparedRef(ref=ref, path=path)
+    glob = apply_aliases(apply_aliases(normalize_glob(ref.glob), aliases), links)
     segments = glob.split("/")
     prefixes = []
     for end in range(1, len(segments) + 1):
@@ -145,10 +163,21 @@ def classify(
     """``ignore`` are glob rules (IGNORE), ``ignored_paths`` exact folders
     ignored in the web UI."""
     aliases = aliases or {}
+    candidates = list(candidates)
     roots = [normalize(r) for r in roots]
-    prepared = [_prepare(ref, aliases) for ref in references]
+    links = symlink_aliases(candidates)
+    prepared = [_prepare(ref, aliases, links) for ref in references]
     ignored = {normalize(p) for p in ignored_paths}
     return [_classify_one(c, prepared, roots, ignore, ignored, checked_sources) for c in candidates]
+
+
+def symlink_aliases(candidates: Iterable[Candidate]) -> dict[str, str]:
+    """``/opt/appdata/sonarr -> sonarr-v4``: a mount of the link uses the target."""
+    return {
+        normalize(c.path): normalize(c.link_target)
+        for c in candidates
+        if c.is_symlink and c.link_target
+    }
 
 
 def _classify_one(
@@ -224,7 +253,7 @@ def _ignored_reason(
     ignored_paths: Collection[str],
 ) -> Notice | None:
     if candidate.is_symlink:
-        return reason("symlink")
+        return reason("symlink", target=candidate.link_target or "?")
     for root in roots:
         if any(is_same_or_under(root, identity) for identity in identities):
             return reason("nested-root", root=root)
@@ -247,24 +276,32 @@ def sanity_warnings(
 ) -> list[Notice]:
     """Detect setups that would make every folder look orphaned."""
     aliases = aliases or {}
+    links = symlink_aliases(candidates)
     warnings: list[Notice] = []
     literal = [apply_aliases(normalize(r.path), aliases) for r in references if r.glob is None]
     for root in (normalize(r) for r in roots):
-        if not any(c.root == root for c in candidates):
+        in_root = [c for c in candidates if c.root == root]
+        if not in_root:
             continue
-        if references and not any(is_under(path, root) for path in literal):
+        # a symlinked root is reported by Docker under its real path
+        names = {root} | {c.real_path.rsplit("/", 1)[0] for c in in_root if c.real_path}
+        if references and not any(is_under(path, r) for path in literal for r in names):
             warnings.append(warning("root-unreferenced", root=root))
     for ref in references:
         if ref.glob is None:
             continue
-        prepared = _prepare(ref, aliases)
+        prepared = _prepare(ref, aliases, links)
         if any(p.fullmatch(normalize(c.path)) for p in prepared.prefixes for c in candidates):
             continue
-        # Could the unknown part stand for a folder in a scan root?
-        glob = apply_aliases(normalize(ref.glob), aliases)
+        glob = apply_aliases(normalize_glob(ref.glob), aliases)
+        if "*" not in glob:
+            continue
+        # Could the unknown part stand for a folder in a scan root? An invisible
+        # separator stands for "some folder" there.
         tail = glob.split("*", 1)[1]
         for root in (normalize(r) for r in roots):
-            if prepared.full is not None and prepared.full.fullmatch(f"{root}/⁣{tail}"):
+            probe = f"{root}/\u2063{tail}"
+            if prepared.full is not None and prepared.full.fullmatch(probe):
                 warnings.append(
                     warning(
                         "unresolved-path",
@@ -287,6 +324,7 @@ def build_report(
     ignored_paths: Collection[str] = (),
     aliases: Mapping[str, str] | None = None,
     warnings: Sequence[Notice] = (),
+    failed_roots: Sequence[str] = (),
 ) -> ScanReport:
     ok_sources = [s.name for s in sources if s.ok]
     folders = classify(
@@ -317,7 +355,8 @@ def build_report(
 
     return ScanReport(
         roots=[normalize(r) for r in roots],
-        complete=bool(sources) and all(s.ok for s in sources),
+        complete=bool(sources) and all(s.ok for s in sources) and not failed_roots,
+        uncertain=any(w.code in UNCERTAIN_WARNINGS for w in unique.values()),
         sources=list(sources),
         warnings=list(unique.values()),
         summary=summarize(folders),

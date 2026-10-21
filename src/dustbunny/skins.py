@@ -98,7 +98,9 @@ def parse_skin(skin_id: str, text: str) -> Skin:
     if meta.get("scheme") and meta["scheme"] not in ("dark", "light"):
         problems.append(f'scheme must be light or dark, not "{meta["scheme"]}"')
     values: dict[str, str] = {}
-    body = re.sub(r"/\*[\s\S]*?\*/", "", text)
+    without_comments = re.sub(r"/\*[\s\S]*?\*/", "", text)
+    # only colours inside ":root { ... }" count; other selectors are ignored
+    body = "\n".join(re.findall(r":root\s*\{([^}]*)\}", without_comments))
     for match in _VAR_RE.finditer(body):
         name, value = match.group(1).lower(), match.group(2)
         if name not in TOKENS:

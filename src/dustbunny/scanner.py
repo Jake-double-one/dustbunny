@@ -17,6 +17,7 @@ from dustbunny.paths import normalize
 class DiscoveryResult:
     candidates: list[Candidate] = field(default_factory=list)
     warnings: list[Notice] = field(default_factory=list)
+    failed_roots: list[str] = field(default_factory=list)
 
 
 def validate_roots(roots: Sequence[str]) -> list[str]:
@@ -46,20 +47,24 @@ def discover(roots: Sequence[str], *, with_stats: bool = True) -> DiscoveryResul
             root_stat = os.stat(root)
         except OSError as exc:
             result.warnings.append(warning("root-missing", root=root, error=exc.strerror))
+            result.failed_roots.append(root)
             continue
         if not stat.S_ISDIR(root_stat.st_mode):
             result.warnings.append(warning("root-not-directory", root=root))
+            result.failed_roots.append(root)
             continue
         real_root = os.path.realpath(root)
         try:
             entries = sorted(os.scandir(root), key=lambda e: e.name)
         except OSError as exc:
             result.warnings.append(warning("root-unreadable", root=root, error=exc.strerror))
+            result.failed_roots.append(root)
             continue
-        for entry in entries:
-            candidate = _candidate(entry, root, real_root, root_stat.st_dev, with_stats)
-            if candidate is not None:
-                result.candidates.append(candidate)
+        found = [_candidate(e, root, real_root, root_stat.st_dev, with_stats) for e in entries]
+        result.candidates.extend(c for c in found if c is not None)
+        if not any(c is not None for c in found):
+            # e.g. an NFS share or a disk array that isn't mounted (yet)
+            result.warnings.append(warning("root-empty", root=root))
     return result
 
 
@@ -86,13 +91,24 @@ def _candidate(
     )
     if is_symlink:
         candidate.last_modified = _ts(entry_stat.st_mtime)
+        target = normalize(os.path.realpath(path))
+        candidate.link_target = target if target != path else None
         return candidate
     if with_stats:
-        size, mtime, complete = tree_stats(path)
-        candidate.size_bytes = size
-        candidate.last_modified = _ts(mtime)
-        candidate.stats_complete = complete
+        try:
+            size, mtime, complete = tree_stats(path)
+        except OSError:  # removed while scanning
+            candidate.stats_complete = False
+        else:
+            candidate.size_bytes = size
+            candidate.last_modified = _ts(mtime)
+            candidate.stats_complete = complete
     return candidate
+
+
+# Hard-link heavy trees (rsnapshot) would make the inode set grow without limit;
+# beyond this many, further hard links are counted every time they appear.
+MAX_TRACKED_HARDLINKS = 1_000_000
 
 
 def tree_stats(path: str) -> tuple[int, float, bool]:
@@ -112,26 +128,25 @@ def tree_stats(path: str) -> tuple[int, float, bool]:
         current = stack.pop()
         try:
             with os.scandir(current) as it:
-                entries = list(it)
+                for entry in it:
+                    try:
+                        st = entry.stat(follow_symlinks=False)
+                    except OSError:
+                        complete = False
+                        continue
+                    newest = max(newest, st.st_mtime)
+                    if st.st_dev != device:
+                        continue  # separate mount below the folder: don't count it
+                    if st.st_nlink > 1 and not stat.S_ISDIR(st.st_mode):
+                        if st.st_ino in seen_inodes:
+                            continue
+                        if len(seen_inodes) < MAX_TRACKED_HARDLINKS:
+                            seen_inodes.add(st.st_ino)
+                    total += _usage(st)
+                    if stat.S_ISDIR(st.st_mode):
+                        stack.append(entry.path)
         except OSError:
             complete = False
-            continue
-        for entry in entries:
-            try:
-                st = entry.stat(follow_symlinks=False)
-            except OSError:
-                complete = False
-                continue
-            newest = max(newest, st.st_mtime)
-            if st.st_dev != device:
-                continue  # separate mount below the folder: don't count it
-            if st.st_nlink > 1 and not stat.S_ISDIR(st.st_mode):
-                if st.st_ino in seen_inodes:
-                    continue
-                seen_inodes.add(st.st_ino)
-            total += _usage(st)
-            if stat.S_ISDIR(st.st_mode):
-                stack.append(entry.path)
     return total, newest, complete
 
 

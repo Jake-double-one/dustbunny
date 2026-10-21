@@ -27,10 +27,12 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ inputs.ref || github.ref }}
-      # ubuntu-latest ships Python 3.12, the version of the image
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.12' # the version of the image
       - name: Install
         run: |
-          python3 -m venv .venv
+          python -m venv .venv
           .venv/bin/pip install --quiet -e ".[dev]"
       - run: .venv/bin/ruff check .
       - run: .venv/bin/ruff format --check .
@@ -69,6 +71,8 @@ jobs:
           # main: the last release plus how far ahead, e.g. v0.1.0 or v0.1.0-3-g1a2b3c4
           else v="$(git describe --tags --match 'v*' 2>/dev/null || echo "0.0.0-$(git rev-parse --short HEAD)")"; fi
           echo "version=${v#v}" >> "$GITHUB_OUTPUT"
+          # a branch name like feature/x is no valid image tag
+          echo "ref_tag=$(echo "$INPUT_REF" | tr '/' '-')" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Image name (registry names must be lowercase)
         id: name
@@ -86,7 +90,7 @@ jobs:
             type=semver,pattern={{version}},enable=${{ startsWith(github.ref, 'refs/tags/') }}
             type=semver,pattern={{major}}.{{minor}},enable=${{ startsWith(github.ref, 'refs/tags/') }}
             type=ref,event=tag
-            type=raw,value=${{ inputs.ref }},enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=raw,value=${{ steps.info.outputs.ref_tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
       - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
@@ -106,3 +110,40 @@ jobs:
             GIT_SHA=${{ steps.info.outputs.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # tag v1.2.3 → GitHub release "Dustbunny 1.2.3" with docs/releases/v1.2.3.md as release notes
+  # (without that file, GitHub writes the notes from the commits)
+  release:
+    needs: image
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/dustbunny"
+          file="docs/releases/${TAG}.md"
+          {
+            if [ -f "$file" ]; then cat "$file"; echo; fi
+            echo "## Docker image"
+            echo
+            echo '```sh'
+            echo "docker pull ${image}:${version}"
+            echo '```'
+            echo
+            echo "For \`linux/amd64\` and \`linux/arm64\`. Setup: see the [README](https://github.com/${GITHUB_REPOSITORY}#install-with-docker--portainer)."
+          } > release-notes.md
+          args=(--title "Dustbunny ${version}" --notes-file release-notes.md)
+          [ -f "$file" ] || args+=(--generate-notes)
+          [[ "$version" == *-* ]] && args+=(--prerelease)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "Dustbunny ${version}" --notes-file release-notes.md
+          else
+            gh release create "$TAG" --verify-tag "${args[@]}"
+          fi

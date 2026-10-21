@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import os
 import sqlite3
 import threading
 from collections.abc import Iterator
@@ -15,7 +17,18 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-from dustbunny.models import Category, FolderResult, ScanReport
+from pydantic import BaseModel
+
+from dustbunny.models import (
+    Candidate,
+    Category,
+    FolderResult,
+    Notice,
+    Reference,
+    ScanReport,
+    SourceStatus,
+)
+from dustbunny.paths import is_under
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS orphans (
@@ -46,6 +59,17 @@ class OrphanChanges:
         return bool(self.new or self.resolved)
 
 
+class ScanInputs(BaseModel):
+    """What a scan found. Kept (also across restarts) so the report can be
+    rebuilt without a new scan when an ignore changes."""
+
+    candidates: list[Candidate]
+    references: list[Reference]
+    sources: list[SourceStatus]
+    warnings: list[Notice] = []
+    failed_roots: list[str] = []
+
+
 class State:
     def __init__(self, path: Path):
         self.path = path
@@ -53,6 +77,10 @@ class State:
         self._lock = threading.Lock()
         with self._connect() as db:
             db.executescript(SCHEMA)
+        # SQLite creates its file as 0644 whatever the umask is. Group-writable, the same
+        # file works whether the container runs as root or as uid 1000 (see Dockerfile).
+        with contextlib.suppress(OSError):
+            os.chmod(path, os.stat(path).st_mode | 0o060)
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -85,25 +113,34 @@ class State:
     def track_orphans(self, report: ScanReport) -> OrphanChanges:
         """Record orphans of a report and fill in ``first_seen``.
 
-        Only a complete report changes what is recorded: an incomplete one
-        (a source failed) would make folders appear and disappear wrongly.
+        Only a reliable report changes what is recorded: an incomplete or
+        uncertain one would make folders appear and disappear wrongly.
         """
         changes = OrphanChanges()
         orphans = {f.path: f for f in report.folders if f.category is Category.ORPHAN}
         by_path = {f.path: f for f in report.folders}
+        # A scan root without any folder is more likely not mounted than emptied:
+        # its known orphans stay as they are.
+        roots_seen = {f.root for f in report.folders}
+        unseen_roots = [r for r in report.roots if r not in roots_seen]
         with self._connect() as db:
             known = dict(db.execute("SELECT path, since FROM orphans").fetchall())
             changes.first_scan = (
                 db.execute("SELECT 1 FROM meta WHERE key = 'tracked'").fetchone() is None
             )
-            if report.complete:
+            if report.reliable:
                 since = report.generated_at.isoformat()
                 for path, folder in orphans.items():
                     if path not in known:
                         db.execute("INSERT INTO orphans (path, since) VALUES (?, ?)", (path, since))
                         known[path] = since
                         changes.new.append(folder)
-                for path in [p for p in known if p not in orphans]:
+                gone = [
+                    p
+                    for p in known
+                    if p not in orphans and not any(is_under(p, r) for r in unseen_roots)
+                ]
+                for path in gone:
                     db.execute("DELETE FROM orphans WHERE path = ?", (path,))
                     del known[path]
                     changes.resolved.append((path, by_path.get(path)))
@@ -113,7 +150,24 @@ class State:
                 folder.first_seen = datetime.fromisoformat(known[path])
         return changes
 
-    # ---- last report -----------------------------------------------------------
+    # ---- last scan -------------------------------------------------------------
+
+    def save_inputs(self, inputs: ScanInputs) -> None:
+        with self._connect() as db:
+            db.execute(
+                "INSERT OR REPLACE INTO meta (key, value) VALUES ('inputs', ?)",
+                (inputs.model_dump_json(),),
+            )
+
+    def load_inputs(self) -> ScanInputs | None:
+        with self._connect() as db:
+            row = db.execute("SELECT value FROM meta WHERE key = 'inputs'").fetchone()
+        if row is None:
+            return None
+        try:
+            return ScanInputs.model_validate_json(row[0])
+        except ValueError:
+            return None  # written by an incompatible version
 
     def save_report(self, report: ScanReport) -> None:
         with self._connect() as db:

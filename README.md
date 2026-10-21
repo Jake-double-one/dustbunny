@@ -11,7 +11,7 @@
 
 When you remove a stack in Portainer (or run `docker compose down` and delete the compose file), its
 bind mounts – e.g. `/opt/appdata/<stack>` – stay on disk. Docker forgets them as soon as the container is
-gone. Dustbunny lists every folder in your appdata roots and tells you which ones nothing uses anymore,
+gone. Dustbunny lists every folder in your scan roots (e.g. `/opt/appdata`) and tells you which ones nothing uses anymore,
 why it thinks so, how big they are and since when they are orphaned.
 
 **Dustbunny only reads.** It never changes or deletes anything.
@@ -37,11 +37,11 @@ why it thinks so, how big they are and since when they are orphaned.
 
 | | |
 |---|---|
-| **Finds orphaned folders** | Every folder in your appdata roots is checked against running and stopped containers, Portainer stacks (also stopped ones) and compose files. |
+| **Finds orphaned folders** | Every folder in your scan roots is checked against running and stopped containers, Portainer stacks (also stopped ones) and compose files. |
 | **Explains itself** | Each folder shows why it is orphaned or who uses it – container, stack, mount type. |
 | **Size and age** | Disk usage like `du`, last change anywhere in the folder, and "orphaned for 23 days". |
 | **Safe when in doubt** | A folder that might still be used counts as used. If a source fails, the result is marked incomplete and no notification goes out. |
-| **Notifications** | New or resolved orphans via [Apprise](https://github.com/caronc/apprise): ntfy, Discord, e-mail, Telegram, Gotify, … |
+| **Notifications** | Newly orphaned folders and folders that are no longer orphaned, via [Apprise](https://github.com/caronc/apprise): ntfy, Discord, e-mail, Telegram, Gotify, … |
 | **Web UI** | Works on the phone, several skins, English and German, ignore a folder with one click. |
 | **Read-only by design** | Read-only mounts, a socket proxy that only allows reading, read-only container file system. |
 
@@ -69,8 +69,14 @@ why it thinks so, how big they are and since when they are orphaned.
 | **Orphaned** | nothing references it |
 | **Ignored** | ignore rule, ignored in the web UI, symbolic link or system folder (`lost+found`, `@eaDir`, …) |
 
-When in doubt, a folder counts as used: a missed orphan costs a little disk space, a live folder shown as
-orphaned could cost data.
+When in doubt, a folder counts as used: a missed orphaned folder costs a little disk space, a live folder
+shown as orphaned could cost data. For the same reason Dustbunny stays quiet when it can't be sure:
+
+- If a source fails or a scan root can't be read, the result is marked **incomplete**.
+- If a path can't be checked fully (an unknown variable, an unreadable compose file), the result is marked
+  **uncertain** and a hint says what to fix.
+
+In both cases there are no notifications, and "orphaned for … days" doesn't change.
 
 ## Install with Docker / Portainer
 
@@ -89,6 +95,9 @@ docker compose up -d
 ```
 
 Open `http://<host>:8077`. The first scan starts right away.
+
+To build the image from this repository instead of pulling it:
+`docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
 
 > [!IMPORTANT]
 > **Mount your appdata under exactly the same path as on the host.** Docker reports host paths, so
@@ -120,7 +129,7 @@ All settings are environment variables.
 | `SCAN_ROOTS` | – | **Required.** Appdata folders, comma-separated. Mount each under the same path. |
 | `IGNORE` | | Folders to skip: names or paths, globs allowed, comma-separated (`backup-*,/opt/appdata/keep`) |
 | `PATH_ALIASES` | | `HOST=LOCAL` path translations, comma-separated |
-| `SCAN_INTERVAL` | `6h` | `30m`, `6h`, `1d` … `0` = only when you click *Scan now* |
+| `SCAN_INTERVAL` | `6h` | `30m`, `6h`, `1d` … `0` = no scheduled scans (one at start, then on *Scan now*). After an incomplete scan, the next one comes after 2 minutes. |
 | `SCAN_SIZES` | `true` | Calculate size and last change (reads every file's metadata) |
 | `DOCKER_ENABLED` | `true` | Ask the Docker API |
 | `DOCKER_HOST` | local socket | e.g. `tcp://socket-proxy:2375` |
@@ -130,10 +139,10 @@ All settings are environment variables.
 | `PORTAINER_INSECURE` | `false` | Accept a self-signed certificate |
 | `COMPOSE_DIRS` | | Folders with one stack per subfolder, comma-separated |
 | `NOTIFY_URLS` | | Apprise URLs, comma-separated |
-| `NOTIFY_ON` | `change` | `change`: new or resolved orphans · `always`: after every scan |
+| `NOTIFY_ON` | `change` | `change`: newly orphaned folders or folders no longer orphaned · `always`: after every scan |
 | `NOTIFY_LANGUAGE` | `en` | Language of notifications (`en`, `de`, …) |
 | `AUTH_USER` / `AUTH_PASSWORD` | | Password for the web UI (Basic Auth). Recommended if others can reach it. |
-| `PORT` | `8080` | Port inside the container |
+| `HOST` / `PORT` | `0.0.0.0` / `8080` | Address and port the web server listens on inside the container |
 | `DATA_DIR` | `/data` | State (SQLite) and your own skins |
 | `SKINS_DIR` | `$DATA_DIR/skins` | Folder for your own skins |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warning`, `error` |
@@ -167,8 +176,9 @@ under the same path, so relative paths (`./config`) resolve correctly.
 
 Set `NOTIFY_URLS` to one or more [Apprise URLs](https://github.com/caronc/apprise/wiki), for example
 `ntfy://ntfy.sh/my-topic`, `discord://webhook_id/webhook_token`, `tgram://bot_token/chat_id`,
-`mailtos://user:password@example.com`. A message lists newly orphaned folders with their size and folders
-that are no longer orphaned. Incomplete results never notify.
+`mailtos://user:password@example.com`. The first scan lists all orphaned folders it finds; after that, a
+message lists newly orphaned folders with their size and folders that are no longer orphaned. Incomplete or
+uncertain results never notify.
 
 ## Folder sizes and permissions
 
@@ -180,6 +190,9 @@ Appdata folders often belong to different users and are not readable for others 
 - **Without root:** remove the `user` and `cap_add` lines. Dustbunny runs as uid 1000 and reads what that
   user may read (folders of most linuxserver.io images use uid 1000). Sizes of other folders are marked as
   incomplete; detection itself is not affected.
+
+Switching between both ways is safe: the files in `/data` stay writable for both. If you use a host folder
+instead of the `dustbunny-data` volume, it must be writable for uid 1000 or group 0.
 
 ## Skins
 
@@ -198,8 +211,8 @@ top right.
 **Adding a language:** copy [`src/dustbunny/locales/en.json`](src/dustbunny/locales/en.json) to
 `<code>.json` (e.g. `fr.json`), translate the values and set `language.name`. It appears in the language
 menu automatically. `pytest` checks that the file has every key and the same `{placeholders}`. Keys ending in
-`_one` / `_other` are plural forms; languages with more forms can add `_few`, `_many`, … (as in
-`Intl.PluralRules`). The terms are explained in [`docs/glossary.md`](docs/glossary.md).
+`_one` / `_other` are plural forms; languages with more forms can add `_zero`, `_two`, `_few`, `_many` (as in
+`Intl.PluralRules`) – the web UI uses them, notifications use `_one` / `_other`. The terms are explained in [`docs/glossary.md`](docs/glossary.md).
 
 ## API and command line
 
@@ -229,6 +242,10 @@ SCAN_ROOTS=/opt/appdata .venv/bin/dustbunny          # web UI on http://localhos
 ```
 
 `http://localhost:8080/?demo` shows demo data (`scripts/demo_report.py` creates it).
+
+**Releasing:** write the release notes to `docs/releases/vX.Y.Z.md`, set `version` in `pyproject.toml`,
+then tag and push (`git tag vX.Y.Z && git push origin vX.Y.Z`). CI tests, builds the image for amd64 and
+arm64, pushes it to ghcr.io and publishes the GitHub release with these notes.
 
 ```
 src/dustbunny/

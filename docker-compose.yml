@@ -1,10 +1,9 @@
 # Dustbunny – ready for Portainer stacks (Stacks → Add stack → Web editor or Repository).
-# Web editor: paste this file and adjust the lines marked with ← .
-# Repository / CLI: `docker compose up -d --build` builds the image from this repo instead.
+# Paste this file and adjust the lines marked with ← .
+# To build the image from this repo instead: docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 services:
   dustbunny:
     image: ghcr.io/jake-double-one/dustbunny:latest
-    build: .
     container_name: dustbunny
     restart: unless-stopped
     depends_on:
@@ -55,7 +54,7 @@ services:
       - /tmp
     security_opt:
       - no-new-privileges:true
-    mem_limit: 256m
+    mem_limit: 512m
 
   # Gives Dustbunny read access to the container and volume lists – nothing else.
   socket-proxy:

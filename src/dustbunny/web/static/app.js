@@ -1,4 +1,4 @@
-import { LANGUAGES, VERSION, initI18n, lang, notice, setLang, t } from './i18n.js';
+import { LANGUAGES, VERSION, has, initI18n, lang, notice, setLang, t } from './i18n.js';
 import { applySkin, currentSkin, onSchemeChange, setSkin, skinList, skinName } from './skins.js';
 
 const CATS = ['orphan', 'defined-only', 'stopped', 'active', 'ignored'];
@@ -65,6 +65,9 @@ function owners(hits, onlyState) {
 }
 const bestState = f => f.protected_by.map(x => x.reference.state).sort((a, b) => STATE_RANK[a] - STATE_RANK[b])[0];
 
+// a translated label, or the raw code if no language file knows it
+const label = (prefix, code) => (has(`${prefix}.${code}`) ? t(`${prefix}.${code}`) : code);
+
 function flash(el, text) {
   const before = el.textContent;
   el.textContent = text;
@@ -77,37 +80,63 @@ function renderHeader() {
   document.querySelectorAll('[data-i18n-label]').forEach(el => el.setAttribute('aria-label', t(el.dataset.i18nLabel)));
   document.getElementById('version').textContent = VERSION ? `v${VERSION}` : '';
 
-  const select = document.getElementById('lang');
-  select.replaceChildren(...LANGUAGES.map(l => h('option', { value: l.code, selected: l.code === lang }, l.name)));
-  select.hidden = LANGUAGES.length < 2;
+  document.getElementById('lang').value = lang;
 
   const current = currentSkin();
-  document.getElementById('skin-picker').replaceChildren(...skinList().map(s => h('button', {
+  const picker = document.getElementById('skin-picker');
+  const focused = picker.contains(document.activeElement);
+  picker.replaceChildren(...skinList().map(s => h('button', {
     type: 'button', role: 'radio', class: 'swatch',
     style: `--sw-bg:${s.bg};--sw-accent:${s.accent}`,
     'aria-checked': String(s.id === current),
+    tabindex: s.id === current ? '0' : '-1',
     'aria-label': skinName(s, lang), title: skinName(s, lang),
     onclick: () => { setSkin(s.id); renderHeader(); },
   })));
+  if (focused) picker.querySelector('[aria-checked="true"]')?.focus();
+}
+
+// radio group: arrow keys move between skins
+function onPickerKey(e) {
+  const keys = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
+  if (!(e.key in keys)) return;
+  const buttons = [...e.currentTarget.querySelectorAll('.swatch')];
+  const i = buttons.indexOf(document.activeElement);
+  const next = buttons[(i + keys[e.key] + buttons.length) % buttons.length];
+  e.preventDefault();
+  next?.click();
 }
 
 /* ---------- main ------------------------------------------------------- */
 function render() {
   renderHeader();
+  // keep typing in the search box while the page updates
+  const search = document.activeElement?.classList.contains('search') ? document.activeElement : null;
+  const caret = search ? [search.selectionStart, search.selectionEnd] : null;
   const app = document.getElementById('app');
   const r = state.report;
   const parts = [hints()];
-  if (r) parts.unshift(lede(r), rail(r), stats(r));
+  if (r) parts.unshift(lede(r), sizesKnown(r) ? rail(r) : null, stats(r));
   else parts.unshift(lede(null));
   if (r) parts.push(toolbar(r), list(r));
   app.replaceChildren(...parts);
+  if (search) {
+    const input = app.querySelector('.search');
+    input?.focus();
+    input?.setSelectionRange(...caret);
+  }
 }
+
+const sizesKnown = r => r.folders.some(f => f.size_bytes != null);
 
 const scanning = () => !!state.status?.scanning;
 
 function lede(r) {
   const orphans = r?.summary.counts.orphan || 0;
-  const [num, unit] = sizeParts(r?.summary.orphan_bytes || 0);
+  // without sizes (SCAN_SIZES=false) the big number is the count of orphaned folders
+  const [num, unit] = r && !sizesKnown(r)
+    ? [new Intl.NumberFormat(lang).format(orphans), t('hero.unitFolders', { count: orphans })]
+    : sizeParts(r?.summary.orphan_bytes || 0);
   let text;
   if (!r) text = t('hero.noScan');
   else {
@@ -154,6 +183,7 @@ function hints() {
   if (s?.last_error) items.push(h('div', { class: 'hint alert' }, t('hint.scanFailed', { error: s.last_error })));
   if (!r && scanning()) items.push(h('div', { class: 'hint loading' }, t('hint.firstScan')));
   if (r && !r.complete) items.push(h('div', { class: 'hint alert' }, t('hint.incomplete')));
+  if (r && r.uncertain) items.push(h('div', { class: 'hint alert' }, t('hint.uncertain')));
   for (const w of r?.warnings || []) items.push(h('div', { class: 'hint' }, notice('warning', w)));
   if (DEMO) items.push(h('div', { class: 'hint' }, t('hint.demo')));
   return h('div', { class: 'hints', hidden: items.length === 0 }, items);
@@ -211,7 +241,7 @@ function row(f) {
   const details = h('details', { class: 'row', 'data-cat': f.category, open: state.open.has(f.path) },
     h('summary', {},
       h('span', { class: `dot ${f.category}`, title: t('category.' + f.category), role: 'img', 'aria-label': t('category.' + f.category) }),
-      h('span', {}, h('div', { class: 'name' }, f.name), h('div', { class: 'meta' }, meta)),
+      h('span', {}, h('span', { class: 'name' }, f.name), h('span', { class: 'meta' }, meta)),
       h('span', { class: 'size' }, size(f.size_bytes)),
       chev),
     detail(f));
@@ -222,7 +252,7 @@ function row(f) {
 function detail(f) {
   const ref = hit => h('li', {},
     h('span', { class: 'who' }, hit.reference.owner || '–'),
-    h('span', { class: 'what' }, [t('state.' + hit.reference.state), t('kind.' + hit.reference.kind), hit.reference.source].join(' · ')),
+    h('span', { class: 'what' }, [label('state', hit.reference.state), label('kind', hit.reference.kind), hit.reference.source].join(' · ')),
     h('span', { class: 'where' }, hit.reference.path));
   const facts = [
     [t('detail.size'), size(f.size_bytes)],
@@ -261,7 +291,9 @@ async function loadReport() {
 }
 
 let polling = null;
+let shown = null;
 async function refresh() {
+  const wasScanning = scanning();
   try {
     const before = state.status?.last_scan_at;
     await loadStatus();
@@ -270,17 +302,25 @@ async function refresh() {
   } catch {
     state.error = true;
   }
-  render();
+  // redraw only when something changed: a redraw would close menus and reset focus
+  const now = JSON.stringify([state.status, state.report?.generated_at, state.error]);
+  if (now !== shown) { shown = now; render(); }
+  if (wasScanning && !scanning() && state.report) announce(t('hero.lastScan', { time: clock(state.report.generated_at) }));
   clearTimeout(polling);
   polling = setTimeout(refresh, scanning() ? 2000 : 60000);
+}
+
+function announce(text) {
+  document.getElementById('live').textContent = text;
 }
 
 async function startScan(button) {
   if (DEMO) { flash(button, t('scan.demo')); return; }
   try {
-    await api('api/scan', { method: 'POST' });
+    await api('api/scan', { method: 'POST', body: '{}' });
     state.status = { ...state.status, scanning: true };
     render();
+    announce(t('scan.running'));
     clearTimeout(polling);
     polling = setTimeout(refresh, 1000);
   } catch { flash(button, t('detail.failed')); }
@@ -296,7 +336,11 @@ async function toggleIgnore(path, ignored, button) {
 /* ---------- start ------------------------------------------------------ */
 applySkin();
 onSchemeChange(renderHeader);
-document.getElementById('lang').addEventListener('change', async e => { await setLang(e.target.value); render(); });
+const select = document.getElementById('lang');
+select.replaceChildren(...LANGUAGES.map(l => h('option', { value: l.code }, l.name)));
+select.hidden = LANGUAGES.length < 2;
+select.addEventListener('change', async e => { await setLang(e.target.value); render(); });
+document.getElementById('skin-picker').addEventListener('keydown', onPickerKey);
 
 await initI18n();
 if (DEMO) {

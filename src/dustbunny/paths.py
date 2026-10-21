@@ -66,6 +66,28 @@ def normalize(path: str) -> str:
     return norm
 
 
+def normalize_glob(glob: str) -> str:
+    """Normalize a path pattern where ``*`` stands for an unknown part.
+
+    Unlike :func:`normalize`, ``..`` never removes a segment with ``*``: the
+    parent of an unknown path is just as unknown (``*/../x`` -> ``*/x``).
+    """
+    absolute = glob.startswith("/")
+    parts: list[str] = []
+    for segment in glob.split("/"):
+        if segment in ("", "."):
+            continue
+        if segment == "..":
+            if parts and "*" in parts[-1]:
+                parts[-1] = "*"
+            elif parts:
+                parts.pop()
+            continue
+        parts.append(segment)
+    joined = "/".join(parts)
+    return ("/" + joined) if absolute else joined
+
+
 def is_under(child: str, parent: str) -> bool:
     """True if ``child`` lies strictly below ``parent`` (both normalized)."""
     if parent == "/":
