@@ -27,6 +27,7 @@ why it thinks so, how big they are and since when they are orphaned.
 - [Sources](#sources)
 - [Notifications](#notifications)
 - [Folder sizes and permissions](#folder-sizes-and-permissions)
+- [Reverse proxy](#reverse-proxy)
 - [Skins](#skins)
 - [Languages](#languages)
 - [API and command line](#api-and-command-line)
@@ -193,6 +194,21 @@ Appdata folders often belong to different users and are not readable for others 
 
 Switching between both ways is safe: the files in `/data` stay writable for both. If you use a host folder
 instead of the `dustbunny-data` volume, it must be writable for uid 1000 or group 0.
+
+## Reverse proxy
+
+Dustbunny works behind Traefik, Nginx Proxy Manager, Caddy and the like without extra settings:
+
+- **Keep the port private.** Set the port to `"127.0.0.1:8077:8080"` in `docker-compose.yml` (proxy on the
+  same host), or remove `ports:` and let the proxy reach `dustbunny:8080` through a shared Docker network.
+  Otherwise the open port goes around the proxy and its login.
+- **Login:** either Dustbunny's own (`AUTH_USER` / `AUTH_PASSWORD`, passed through by the proxy) or the
+  proxy's (Authelia, Authentik, …) – then leave Dustbunny's empty and keep the port private as above.
+- **Proxy headers** (`X-Forwarded-For`, `X-Forwarded-Proto`) are not needed and are ignored: Dustbunny
+  doesn't use the client address for anything, uses only relative links and sets no cookies.
+- **Sub-path** (`https://example.com/dustbunny/`): works when the proxy strips the prefix (Traefik
+  `StripPrefix`, Nginx `proxy_pass http://dustbunny:8080/;`).
+- `/healthz` needs no password, for health checks of the proxy or of Docker.
 
 ## Skins
 

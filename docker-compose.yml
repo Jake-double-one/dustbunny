@@ -9,6 +9,8 @@ services:
     depends_on:
       - socket-proxy
     ports:
+      # Behind a reverse proxy on the same host, "127.0.0.1:8077:8080" keeps Dustbunny off the
+      # open network, so nobody can go around the proxy (and its login). See README "Reverse proxy".
       - "8077:8080"                        # ← web UI at http://<host>:8077
     environment:
       # Your appdata folders, comma-separated. Each one must also be mounted below,
