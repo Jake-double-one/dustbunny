@@ -123,7 +123,9 @@ def parse_compose(
             # (shell, Portainer globals): also keep what it would be as unknown.
             # Only references count from this pass, its warnings would be noise.
             warnings = list(ctx.warnings)
+            ctx.alternative = True
             _extract_structured(_interpolate_tree(document, env, defaults=False), ctx)
+            ctx.alternative = False
             ctx.warnings = warnings
 
     _extract_raw(interpolate(text, env), ctx)
@@ -195,6 +197,7 @@ class _Context:
     origin: str | None
     state: RefState
     project: str | None = None
+    alternative: bool = False  # adding references of the "variable set elsewhere" pass
     references: list[Reference] = field(default_factory=list)
     warnings: list[Notice] = field(default_factory=list)
     _seen: set[tuple[str, str]] = field(default_factory=set)
@@ -223,6 +226,7 @@ class _Context:
                 owner=self.owner,
                 origin=_join_origin(self.origin, detail),
                 glob=glob,
+                alternative=self.alternative,
             )
         )
 

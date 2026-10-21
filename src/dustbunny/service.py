@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 
 from dustbunny import notify
@@ -16,7 +16,7 @@ from dustbunny.config import Settings
 from dustbunny.i18n import resolve_language
 from dustbunny.matcher import build_report
 from dustbunny.models import Reference, ScanReport
-from dustbunny.paths import is_same_or_under, normalize, parse_aliases
+from dustbunny.paths import apply_aliases, is_same_or_under, normalize, parse_aliases
 from dustbunny.scanner import discover, validate_roots
 from dustbunny.state import ScanInputs, State
 
@@ -43,7 +43,10 @@ def configured_collectors(settings: Settings) -> list[Collector]:
 
 
 def without_own_root_mounts(
-    references: list[Reference], roots: Sequence[str], own_names: set[str]
+    references: list[Reference],
+    roots: Sequence[str],
+    own_names: set[str],
+    aliases: Mapping[str, str] | None = None,
 ) -> list[Reference]:
     """Dustbunny's own container and stack mount the scan roots. Listing them as
     "mounts the whole scan root" next to every folder would only be noise; their
@@ -55,7 +58,10 @@ def without_own_root_mounts(
         for ref in references
         if ref.owner not in own_names
         or ref.glob is not None
-        or not any(is_same_or_under(root, normalize(ref.path)) for root in roots)
+        or not any(
+            is_same_or_under(root, apply_aliases(normalize(ref.path), aliases or {}))
+            for root in roots
+        )
     ]
 
 
@@ -73,7 +79,7 @@ class ScanService:
         self._send = sender
         self._scan_lock = threading.Lock()  # one scan at a time
         self._report_lock = threading.Lock()  # report, inputs and state change together
-        self._inputs: ScanInputs | None = state.load_inputs()
+        self._inputs: ScanInputs | None = None
         self.report: ScanReport | None = state.load_report()
         self.scanning = False
         self.last_scan_at: datetime | None = self.report.generated_at if self.report else None
@@ -85,6 +91,10 @@ class ScanService:
         except ValueError as exc:
             self.roots, self.aliases = [], {}
             self.config_error = str(exc)
+        saved = state.load_inputs()
+        # after a change of SCAN_ROOTS or PATH_ALIASES the saved scan doesn't fit any more
+        if saved and saved.roots == self.roots and saved.aliases == self.aliases:
+            self._inputs = saved
 
     @property
     def ready(self) -> bool:
@@ -104,7 +114,7 @@ class ScanService:
             own_names: set[str] = set()
             for collector in collectors:
                 own_names |= getattr(collector, "own_names", set())
-            references = without_own_root_mounts(references, self.roots, own_names)
+            references = without_own_root_mounts(references, self.roots, own_names, self.aliases)
             discovery = discover(self.roots, with_stats=self.settings.scan_sizes)
             inputs = ScanInputs(
                 candidates=discovery.candidates,
@@ -112,6 +122,8 @@ class ScanService:
                 sources=sources,
                 warnings=discovery.warnings,
                 failed_roots=discovery.failed_roots,
+                roots=self.roots,
+                aliases=self.aliases,
             )
             with self._report_lock:
                 self._inputs = inputs
@@ -164,7 +176,7 @@ class ScanService:
                 return self.report  # from an older version: the next scan shows it
             report = self._build(self._inputs)
             report.generated_at = self.report.generated_at
-            self.state.track_orphans(report)
+            self.state.track_orphans(report, new_scan=False)
             self.state.save_report(report)
             self.report = report
             return report
