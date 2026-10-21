@@ -14,7 +14,7 @@ from dustbunny.collectors.docker_socket import DockerCollector, own_container_id
 from dustbunny.collectors.portainer import PortainerCollector
 from dustbunny.config import Settings
 from dustbunny.i18n import resolve_language
-from dustbunny.matcher import build_report
+from dustbunny.matcher import build_report, literal_paths
 from dustbunny.models import Reference, ScanReport
 from dustbunny.paths import apply_aliases, is_same_or_under, normalize, parse_aliases
 from dustbunny.scanner import discover, validate_roots
@@ -115,7 +115,11 @@ class ScanService:
             for collector in collectors:
                 own_names |= getattr(collector, "own_names", set())
             references = without_own_root_mounts(references, self.roots, own_names, self.aliases)
-            discovery = discover(self.roots, with_stats=self.settings.scan_sizes)
+            discovery = discover(
+                self.roots,
+                with_stats=self.settings.scan_sizes,
+                tracked=literal_paths(references, self.aliases),
+            )
             inputs = ScanInputs(
                 candidates=discovery.candidates,
                 references=references,

@@ -72,6 +72,10 @@ class Candidate(BaseModel):
     last_modified: datetime | None = None
     created: datetime | None = None
     stats_complete: bool = True
+    path_sizes: dict[str, int] = Field(
+        default_factory=dict,
+        description="Size of each referenced path inside the folder (after PATH_ALIASES).",
+    )
 
 
 class Notice(BaseModel):
@@ -87,6 +91,9 @@ class ReferenceHit(BaseModel):
     reference: Reference
     relation: Relation
     matched_path: str
+    size_bytes: int | None = Field(
+        default=None, description="Size of the referenced path, if it is (in) the folder."
+    )
 
 
 class FolderResult(BaseModel):

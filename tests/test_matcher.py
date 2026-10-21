@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dustbunny.matcher import build_report, classify
+from dustbunny.matcher import build_report, classify, literal_paths
 from dustbunny.models import (
     Candidate,
     Category,
@@ -38,6 +38,25 @@ def test_subfolder_mount_protects() -> None:
     result = one(cand("radarr"), [ref("/opt/appdata/radarr/config/db.sqlite")])
     assert result.category is Category.ACTIVE
     assert result.protected_by[0].relation is Relation.INSIDE
+
+
+def test_hits_carry_the_size_of_the_referenced_path() -> None:
+    folder = cand("jellyfin", size_bytes=900, path_sizes={"/opt/appdata/jellyfin/cache": 700})
+    refs = [
+        ref("/opt/appdata/jellyfin", owner="exact"),
+        ref("/opt/appdata/jellyfin/cache", owner="cache"),
+        ref("/opt/appdata/jellyfin/config", owner="unmeasured"),
+        ref("${X}/jellyfin/cache", glob="*/jellyfin/cache", owner="pattern"),
+        ref("/opt/appdata", owner="broad"),
+    ]
+    result = one(folder, refs)
+    sizes = {h.reference.owner: h.size_bytes for h in result.protected_by + result.broad_access}
+    assert sizes == {"exact": 900, "cache": 700, "unmeasured": None, "pattern": None, "broad": None}
+
+
+def test_literal_paths_apply_aliases() -> None:
+    refs = [ref("/mnt/user/appdata/x/"), ref("${X}/y", glob="*/y")]
+    assert literal_paths(refs, {"/mnt/user/appdata": ROOT}) == {f"{ROOT}/x"}
 
 
 def test_trailing_slash_and_dots_are_normalized() -> None:

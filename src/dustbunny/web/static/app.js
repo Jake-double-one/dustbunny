@@ -306,6 +306,7 @@ function detail(f) {
   const ref = hit => h('li', {},
     h('span', { class: 'who' }, hit.reference.owner || '–'),
     h('span', { class: 'what' }, [label('state', hit.reference.state), label('kind', hit.reference.kind), hit.reference.source].join(' · ')),
+    hit.size_bytes != null ? h('span', { class: 'size' }, size(hit.size_bytes)) : null,
     h('span', { class: 'where' }, hit.reference.path));
   const facts = [
     [t('detail.size'), size(f.size_bytes)],

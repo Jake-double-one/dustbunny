@@ -199,7 +199,12 @@ def _classify_one(
             relation = _relation(prep, identity)
             if relation is None:
                 continue
-            hit = ReferenceHit(reference=prep.ref, relation=relation, matched_path=identity)
+            hit = ReferenceHit(
+                reference=prep.ref,
+                relation=relation,
+                matched_path=identity,
+                size_bytes=_hit_size(candidate, prep, relation),
+            )
             (broad if relation is Relation.BROAD else protected).append(hit)
             break
 
@@ -244,6 +249,20 @@ def _classify_one(
     if not candidate.stats_complete:
         result.reasons.append(reason("stats-incomplete"))
     return result
+
+
+def _hit_size(candidate: Candidate, prep: _PreparedRef, relation: Relation) -> int | None:
+    if relation is Relation.EXACT:
+        return candidate.size_bytes
+    if relation is Relation.INSIDE and prep.path is not None:
+        return candidate.path_sizes.get(prep.path)
+    return None  # broad, or a pattern
+
+
+def literal_paths(references: Iterable[Reference], aliases: Mapping[str, str]) -> set[str]:
+    """Referenced paths without unknown parts, as the matcher compares them;
+    :func:`~dustbunny.scanner.discover` measures the ones inside a folder."""
+    return {apply_aliases(normalize(r.path), aliases) for r in references if r.glob is None}
 
 
 def _ignored_reason(

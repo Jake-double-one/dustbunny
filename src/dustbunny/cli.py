@@ -19,7 +19,7 @@ from dustbunny.collectors import Collector, run_collectors
 from dustbunny.collectors.compose_files import ComposeFilesCollector
 from dustbunny.collectors.static import StaticCollector
 from dustbunny.config import Settings
-from dustbunny.matcher import build_report
+from dustbunny.matcher import build_report, literal_paths
 from dustbunny.models import ScanReport
 from dustbunny.notify import format_size
 from dustbunny.paths import parse_aliases
@@ -77,7 +77,11 @@ def run_once(args: argparse.Namespace, settings: Settings) -> ScanReport:
         collectors.append(ComposeFilesCollector(args.compose))
 
     references, sources = run_collectors(collectors)
-    discovery = discover(roots, with_stats=settings.scan_sizes and not args.no_size)
+    discovery = discover(
+        roots,
+        with_stats=settings.scan_sizes and not args.no_size,
+        tracked=literal_paths(references, aliases),
+    )
     return build_report(
         discovery.candidates,
         references,

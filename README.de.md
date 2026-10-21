@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
+  <img src="docs/logo-light.svg" width="96" align="right" alt="Dustbunny-Logo: Hasenohren schauen aus einem Ordner">
+</picture>
+
 # Dustbunny
 
 **Findet verwaiste Docker-Appdata-Ordner – die Ordner, die liegen bleiben, wenn du einen Stack löschst.**
@@ -223,7 +228,7 @@ Internet erreichbar sein – also hinter deinen [Reverse Proxy](#reverse-proxy).
 Code, Claude Desktop mit lokalem Konnektor) können `http://<host>:8077` verwenden.
 
 **Was Agents können:** `get_summary` (Zahlen, verwaiste Datenmenge, ob das Ergebnis vollständig ist),
-`list_folders` (nach Kategorie oder Suche), `get_folder` (Begründung, welche Container und Stacks ihn verwenden),
+`list_folders` (nach Kategorie oder Suche), `get_folder` (Begründung, welche Container und Stacks ihn verwenden und wie groß ihre Pfade sind),
 `start_scan`. Mit `MCP_ALLOW_CHANGES: "true"` zusätzlich `set_folder_ignored`. Nie möglich: irgendetwas an einem
 Ordner zu ändern – Dustbunny kann das nicht, also können es Agents auch nicht.
 

@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
+  <img src="docs/logo-light.svg" width="96" align="right" alt="Dustbunny logo: bunny ears peeking out of a folder">
+</picture>
+
 # Dustbunny
 
 **Finds orphaned Docker appdata folders – the folders that stay behind after you delete a stack.**
@@ -256,7 +261,7 @@ internet over **HTTPS** – put it behind your [reverse proxy](#reverse-proxy). 
 (Claude Code, Claude Desktop with a local connector) can use `http://<host>:8077`.
 
 **What agents can do:** `get_summary` (counts, orphaned size, whether the result is complete), `list_folders`
-(by category or search), `get_folder` (reasons, which containers and stacks use it), `start_scan`. With
+(by category or search), `get_folder` (reasons, which containers and stacks use it and how big their paths are), `start_scan`. With
 `MCP_ALLOW_CHANGES: "true"` also `set_folder_ignored`. Never possible: anything that touches a folder –
 Dustbunny can't, so agents can't either.
 

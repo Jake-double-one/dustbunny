@@ -363,6 +363,7 @@ def _folder_detail(folder: FolderResult) -> dict[str, Any]:
             "source": r.source,
             "path": r.path,
             "relation": hit.relation.value,
+            "size_bytes": hit.size_bytes,
         }
 
     return {
