@@ -6,6 +6,8 @@ import asyncio
 import base64
 import json
 import logging
+import os
+import re
 import secrets
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
@@ -16,6 +18,7 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.types import Scope
 
 from dustbunny import __version__
 from dustbunny.config import Settings
@@ -38,6 +41,17 @@ SECURITY_HEADERS = {
         "base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
     ),
 }
+
+
+class RevalidatedFiles(StaticFiles):
+    """Static files the browser has to check (ETag) before it reuses them."""
+
+    def file_response(
+        self, full_path: str, stat_result: os.stat_result, scope: Scope, status_code: int = 200
+    ) -> Response:
+        response = super().file_response(full_path, stat_result, scope, status_code)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
 
 
 class IgnoreRequest(BaseModel):
@@ -108,7 +122,15 @@ def create_app(settings: Settings, service: ScanService | None = None) -> FastAP
     skins = SkinCache(custom_dir=settings.custom_skins_dir)
     skins.get()  # read once at start: problems show up in the log right away
     scheduler = Scheduler(service, settings.scan_interval)
-    template = (WEB_DIR / "index.html").read_text(encoding="utf-8")
+    # CSS and JS under a path with the version in it: after an update, no browser
+    # combines the new page with files it cached from the old version
+    assets = "static/" + re.sub(r"[^A-Za-z0-9.-]", "-", __version__)
+    template = (
+        (WEB_DIR / "index.html")
+        .read_text(encoding="utf-8")
+        .replace('href="static/', f'href="{assets}/')
+        .replace('src="static/', f'src="{assets}/')
+    )
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -216,7 +238,9 @@ def create_app(settings: Settings, service: ScanService | None = None) -> FastAP
         )
         return HTMLResponse(page, headers={"Cache-Control": "no-cache"})
 
-    app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
+    static = RevalidatedFiles(directory=WEB_DIR / "static")
+    app.mount(f"/{assets}", static)
+    app.mount("/static", static, name="static")
     assert LOCALES_DIR.is_dir()
     return app
 
