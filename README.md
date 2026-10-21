@@ -30,6 +30,7 @@ why it thinks so, how big they are and since when they are orphaned.
 - [Reverse proxy](#reverse-proxy)
 - [Skins](#skins)
 - [Languages](#languages)
+- [AI agents (MCP)](#ai-agents-mcp)
 - [API and command line](#api-and-command-line)
 - [Development](#development)
 - [Roadmap](#roadmap)
@@ -143,6 +144,9 @@ All settings are environment variables.
 | `NOTIFY_ON` | `change` | `change`: newly orphaned folders or folders no longer orphaned · `always`: after every scan |
 | `NOTIFY_LANGUAGE` | `en` | Language of notifications (`en`, `de`, …) |
 | `AUTH_USER` / `AUTH_PASSWORD` | | Password for the web UI (Basic Auth). Recommended if others can reach it. |
+| `MCP_ENABLED` | `false` | Let AI agents connect via MCP at `/mcp` – see [AI agents (MCP)](#ai-agents-mcp) |
+| `MCP_TOKEN` | | Secret key for MCP, at least 24 characters (`openssl rand -hex 24`) |
+| `MCP_ALLOW_CHANGES` | `false` | Agents may also ignore folders (never more) |
 | `HOST` / `PORT` | `0.0.0.0` / `8080` | Address and port the web server listens on inside the container |
 | `DATA_DIR` | `/data` | State (SQLite) and your own skins |
 | `SKINS_DIR` | `$DATA_DIR/skins` | Folder for your own skins |
@@ -229,6 +233,36 @@ top right.
 menu automatically. `pytest` checks that the file has every key and the same `{placeholders}`. Keys ending in
 `_one` / `_other` are plural forms; languages with more forms can add `_zero`, `_two`, `_few`, `_many` (as in
 `Intl.PluralRules`) – the web UI uses them, notifications use `_one` / `_other`. The terms are explained in [`docs/glossary.md`](docs/glossary.md).
+
+## AI agents (MCP)
+
+AI agents can work with Dustbunny through the [Model Context Protocol](https://modelcontextprotocol.io):
+"Which appdata folders are orphaned and how big are they?", "Why is paperless only defined?",
+"Scan again and tell me what changed."
+
+1. Set `MCP_ENABLED: "true"` and a secret `MCP_TOKEN` (at least 24 characters, e.g. `openssl rand -hex 24`).
+2. Connect the agent:
+
+| Agent | How |
+|---|---|
+| **Claude** (web, desktop, app) | Settings → Connectors → *Add custom connector* → name "Dustbunny", address `https://<your-server>/mcp/<MCP_TOKEN>` |
+| **ChatGPT** | Settings → Apps & Connectors → developer mode → *Create connector* → the same address, no authentication |
+| **Grok** | grok.com/connectors → *New connector* → *Custom* → the same address |
+| **Claude Code** | `claude mcp add --transport http dustbunny https://<your-server>/mcp --header "Authorization: Bearer <MCP_TOKEN>"` |
+| **Other clients** | `POST /mcp` with `Authorization: Bearer <MCP_TOKEN>`, or the address with the key |
+
+Cloud agents (Claude, ChatGPT, Grok) call Dustbunny from their servers, so it must be reachable from the
+internet over **HTTPS** – put it behind your [reverse proxy](#reverse-proxy). Agents on your own network
+(Claude Code, Claude Desktop with a local connector) can use `http://<host>:8077`.
+
+**What agents can do:** `get_summary` (counts, orphaned size, whether the result is complete), `list_folders`
+(by category or search), `get_folder` (reasons, which containers and stacks use it), `start_scan`. With
+`MCP_ALLOW_CHANGES: "true"` also `set_folder_ignored`. Never possible: anything that touches a folder –
+Dustbunny can't, so agents can't either.
+
+**Keep the key secret:** it is the only protection of `/mcp` (Basic Auth doesn't apply there). Whoever has it
+can read the folder list. Change `MCP_TOKEN` to cut all agents off. The agent's provider sees the folder
+names and paths it asks about. With `LOG_LEVEL=debug`, the access log shows request paths, including the key.
 
 ## API and command line
 

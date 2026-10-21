@@ -1,4 +1,4 @@
-import { LANGUAGES, VERSION, has, initI18n, lang, notice, setLang, t } from './i18n.js';
+import { LANGUAGES, VERSION, has, initI18n, lang, notice, setLang, store, t } from './i18n.js';
 import { applySkin, currentSkin, onSchemeChange, setSkin, skinList, skinName } from './skins.js';
 
 const CATS = ['orphan', 'defined-only', 'stopped', 'active', 'ignored'];
@@ -7,7 +7,22 @@ const SEG = { active: 'seg-active', stopped: 'seg-stopped', 'defined-only': 'seg
 const STATE_RANK = { running: 0, stopped: 1, defined: 2 };
 const DEMO = new URLSearchParams(location.search).has('demo');
 
-const state = { report: null, status: null, filter: 'all', query: '', open: new Set(), error: null };
+// Sorting: 'category' keeps the server's order (orphaned first). Names go A–Z, sizes and dates
+// largest/newest first; "reverse" flips that. Unknown values (no size, no creation date) stay last.
+const SORTS = ['category', 'name', 'size', 'created', 'changed'];
+const SORT_KEYS = {
+  name: f => f.name.toLocaleLowerCase(),
+  size: f => f.size_bytes,
+  created: f => (f.created ? Date.parse(f.created) : null),
+  changed: f => (f.last_modified ? Date.parse(f.last_modified) : null),
+};
+const savedSort = store.get('sort');
+
+const state = {
+  report: null, status: null, filter: 'all', query: '', open: new Set(), error: null,
+  sort: SORTS.includes(savedSort) ? savedSort : 'category',
+  reverse: store.get('reverse') === '1',
+};
 
 /* ---------- helpers ---------------------------------------------------- */
 // Builds DOM nodes. Text children are always inserted as text, never as HTML.
@@ -199,10 +214,45 @@ function toolbar(r) {
     class: 'search', type: 'search', placeholder: t('search.placeholder'), 'aria-label': t('search.placeholder'), value: state.query,
     oninput: e => { state.query = e.target.value; refreshList(); },
   });
+  const sort = h('select', {
+    class: 'pill-select', 'aria-label': t('sort.label'), title: t('sort.label'),
+    onchange: e => { state.sort = e.target.value; store.set('sort', state.sort); refreshList(); },
+  }, SORTS.map(s => h('option', { value: s, selected: s === state.sort }, t('sort.' + s))));
+  const reverse = h('button', {
+    class: 'chip', type: 'button', 'aria-pressed': String(state.reverse),
+    'aria-label': t('sort.reverse'), title: t('sort.reverse'),
+    onclick: e => {
+      state.reverse = !state.reverse;
+      store.set('reverse', state.reverse ? '1' : '0');
+      e.currentTarget.setAttribute('aria-pressed', String(state.reverse));
+      refreshList();
+    },
+  }, '⇅');
   return h('div', { class: 'toolbar' }, input,
     h('div', { class: 'chips', role: 'group' },
       chip('all', t('filter.all'), r.summary.total),
-      CATS.filter(c => counts[c]).map(c => chip(c, t('category.' + c), counts[c]))));
+      CATS.filter(c => counts[c]).map(c => chip(c, t('category.' + c), counts[c]))),
+    h('div', { class: 'sorting' }, sort, reverse));
+}
+
+function sorted(folders) {
+  const key = SORT_KEYS[state.sort];
+  let out = [...folders];
+  if (key) {
+    const asc = state.sort === 'name';
+    out.sort((a, b) => {
+      const x = key(a), y = key(b);
+      if (x == null || y == null) return (x == null) - (y == null);
+      const order = x < y ? -1 : x > y ? 1 : 0;
+      return asc ? order : -order;
+    });
+  }
+  if (state.reverse) {
+    // flip the order of the known values, unknown ones stay at the end
+    const known = key ? out.filter(f => key(f) != null) : out;
+    out = [...known.reverse(), ...out.filter(f => !known.includes(f))];
+  }
+  return out;
 }
 
 function refreshList() {
@@ -218,7 +268,7 @@ function matches(f) {
 }
 
 function list(r) {
-  const rows = r.folders.filter(matches).map(row);
+  const rows = sorted(r.folders.filter(matches)).map(row);
   return h('div', { class: 'list' }, rows.length ? rows : h('div', { class: 'empty' }, t('list.empty')));
 }
 
@@ -236,6 +286,9 @@ function row(f) {
   } else {
     meta = f.reasons[0] ? notice('reason', f.reasons[0]) : '';
   }
+  // the date the list is sorted by is shown in every row
+  if (state.sort === 'created') meta = [meta, t('row.created', { when: f.created ? ago(f.created) : '–' })].filter(Boolean).join(' · ');
+  if (state.sort === 'changed' && f.category !== 'orphan' && f.last_modified) meta = [meta, t('row.changed', { when: ago(f.last_modified) })].filter(Boolean).join(' · ');
   const chev = h('span', { class: 'chev', 'aria-hidden': 'true' });
   chev.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>';
   const details = h('details', { class: 'row', 'data-cat': f.category, open: state.open.has(f.path) },
@@ -256,6 +309,7 @@ function detail(f) {
     h('span', { class: 'where' }, hit.reference.path));
   const facts = [
     [t('detail.size'), size(f.size_bytes)],
+    [t('detail.created'), f.created && ago(f.created)],
     [t('detail.lastChange'), f.last_modified && ago(f.last_modified)],
     [t('detail.orphanedSince'), f.first_seen && ago(f.first_seen)],
     [t('detail.sources'), f.checked_sources.join(', ') || '–'],

@@ -5,6 +5,7 @@
     "/opt/appdata"
   ],
   "complete": true,
+  "uncertain": true,
   "sources": [
     {
       "name": "docker",
@@ -74,7 +75,8 @@
             "state": "running",
             "owner": "duplicati",
             "origin": null,
-            "glob": null
+            "glob": null,
+            "alternative": false
           },
           "relation": "broad",
           "matched_path": "/opt/appdata/heimdall"
@@ -86,6 +88,7 @@
       ],
       "size_bytes": 50331648,
       "last_modified": "2026-09-21T04:42:00Z",
+      "created": "2026-07-23T07:42:00Z",
       "stats_complete": true,
       "is_symlink": false,
       "is_mountpoint": false,
@@ -120,7 +123,8 @@
             "state": "running",
             "owner": "duplicati",
             "origin": null,
-            "glob": null
+            "glob": null,
+            "alternative": false
           },
           "relation": "broad",
           "matched_path": "/opt/appdata/immich-old"
@@ -132,6 +136,7 @@
       ],
       "size_bytes": 6657199308,
       "last_modified": "2026-03-23T04:42:00Z",
+      "created": "2025-10-06T07:42:00Z",
       "stats_complete": true,
       "is_symlink": false,
       "is_mountpoint": false,
@@ -166,7 +171,8 @@
             "state": "running",
             "owner": "duplicati",
             "origin": null,
-            "glob": null
+            "glob": null,
+            "alternative": false
           },
           "relation": "broad",
           "matched_path": "/opt/appdata/wikijs-test"
@@ -178,6 +184,7 @@
       ],
       "size_bytes": 325058560,
       "last_modified": "2026-06-03T04:42:00Z",
+      "created": "2026-04-04T07:42:00Z",
       "stats_complete": true,
       "is_symlink": false,
       "is_mountpoint": false,
@@ -206,7 +213,8 @@
             "state": "defined",
             "owner": "paperless",
             "origin": null,
-            "glob": null
+            "glob": null,
+            "alternative": false
           },
           "relation": "inside",
           "matched_path": "/opt/appdata/paperless"
@@ -219,7 +227,8 @@
             "state": "defined",
             "owner": "paperless",
             "origin": null,
-            "glob": null
+            "glob": null,
+            "alternative": false
           },
           "relation": "inside",
           "matched_path": "/opt/appdata/paperless"
@@ -234,7 +243,8 @@
             "state": "running",
             "owner": "duplicati",
             "origin": null,
-            "glob": null
+            "glob": null,
+            "alternative": false
           },
           "relation": "broad",
           "matched_path": "/opt/appdata/paperless"
@@ -246,6 +256,7 @@
       ],
       "size_bytes": 2469606195,
       "last_modified": "2026-07-17T04:42:00Z",
+      "created": "2025-08-27T07:42:00Z",
       "stats_complete": true,
       "is_symlink": false,
       "is_mountpoint": false,
@@ -274,7 +285,8 @@
             "state": "stopped",
             "owner": "nextcloud-app",
             "origin": null,
-            "glob": null
+            "glob": null,
+            "alternative": false
           },
           "relation": "inside",
           "matched_path": "/opt/appdata/nextcloud"
@@ -287,7 +299,8 @@
             "state": "stopped",
             "owner": "nextcloud-db",
             "origin": null,
-            "glob": null
+            "glob": null,
+            "alternative": false
           },
           "relation": "inside",
           "matched_path": "/opt/appdata/nextcloud"
@@ -300,7 +313,8 @@
             "state": "defined",
             "owner": "nextcloud",
             "origin": null,
-            "glob": null
+            "glob": null,
+            "alternative": false
           },
           "relation": "inside",
           "matched_path": "/opt/appdata/nextcloud"
@@ -315,7 +329,8 @@
             "state": "running",
             "owner": "duplicati",
             "origin": null,
-            "glob": null
+            "glob": null,
+            "alternative": false
           },
           "relation": "broad",
           "matched_path": "/opt/appdata/nextcloud"
@@ -327,6 +342,7 @@
       ],
       "size_bytes": 3328599654,
       "last_modified": "2026-09-10T04:42:00Z",
+      "created": "2025-06-08T07:42:00Z",
       "stats_complete": true,
       "is_symlink": false,
       "is_mountpoint": false,
@@ -355,7 +371,8 @@
             "state": "running",
             "owner": "jellyfin",
             "origin": null,
-            "glob": null
+            "glob": null,
+            "alternative": false
           },
           "relation": "inside",
           "matched_path": "/opt/appdata/jellyfin"
@@ -368,7 +385,8 @@
             "state": "running",
             "owner": "jellyfin",
             "origin": null,
-            "glob": null
+            "glob": null,
+            "alternative": false
           },
           "relation": "inside",
           "matched_path": "/opt/appdata/jellyfin"
@@ -383,7 +401,8 @@
             "state": "running",
             "owner": "duplicati",
             "origin": null,
-            "glob": null
+            "glob": null,
+            "alternative": false
           },
           "relation": "broad",
           "matched_path": "/opt/appdata/jellyfin"
@@ -395,6 +414,7 @@
       ],
       "size_bytes": 9019431321,
       "last_modified": "2026-10-21T04:42:00Z",
+      "created": "2024-11-20T07:42:00Z",
       "stats_complete": true,
       "is_symlink": false,
       "is_mountpoint": false,
@@ -423,7 +443,8 @@
             "state": "running",
             "owner": "radarr",
             "origin": null,
-            "glob": null
+            "glob": null,
+            "alternative": false
           },
           "relation": "exact",
           "matched_path": "/opt/appdata/radarr"
@@ -438,7 +459,8 @@
             "state": "running",
             "owner": "duplicati",
             "origin": null,
-            "glob": null
+            "glob": null,
+            "alternative": false
           },
           "relation": "broad",
           "matched_path": "/opt/appdata/radarr"
@@ -450,6 +472,7 @@
       ],
       "size_bytes": 985661440,
       "last_modified": "2026-10-21T04:42:00Z",
+      "created": "2025-01-19T07:42:00Z",
       "stats_complete": true,
       "is_symlink": false,
       "is_mountpoint": false,
@@ -478,7 +501,8 @@
             "state": "running",
             "owner": "sonarr",
             "origin": null,
-            "glob": null
+            "glob": null,
+            "alternative": false
           },
           "relation": "exact",
           "matched_path": "/opt/appdata/sonarr"
@@ -493,7 +517,8 @@
             "state": "running",
             "owner": "duplicati",
             "origin": null,
-            "glob": null
+            "glob": null,
+            "alternative": false
           },
           "relation": "broad",
           "matched_path": "/opt/appdata/sonarr"
@@ -505,6 +530,7 @@
       ],
       "size_bytes": 1288490188,
       "last_modified": "2026-10-21T04:42:00Z",
+      "created": "2025-01-09T07:42:00Z",
       "stats_complete": true,
       "is_symlink": false,
       "is_mountpoint": false,
@@ -534,7 +560,8 @@
             "state": "running",
             "owner": "duplicati",
             "origin": null,
-            "glob": null
+            "glob": null,
+            "alternative": false
           },
           "relation": "broad",
           "matched_path": "/opt/appdata/backup-2024"
@@ -546,6 +573,7 @@
       ],
       "size_bytes": 13421772800,
       "last_modified": "2025-12-25T04:42:00Z",
+      "created": "2025-12-15T07:42:00Z",
       "stats_complete": true,
       "is_symlink": false,
       "is_mountpoint": false,
@@ -575,7 +603,8 @@
             "state": "running",
             "owner": "duplicati",
             "origin": null,
-            "glob": null
+            "glob": null,
+            "alternative": false
           },
           "relation": "broad",
           "matched_path": "/opt/appdata/lost+found"
@@ -587,6 +616,7 @@
       ],
       "size_bytes": 16384,
       "last_modified": "2024-05-04T04:42:00Z",
+      "created": "2024-05-04T07:42:00Z",
       "stats_complete": true,
       "is_symlink": false,
       "is_mountpoint": false,

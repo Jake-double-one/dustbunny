@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from dustbunny.birthtime import birth_time
 from dustbunny.i18n import warning
 from dustbunny.models import Candidate, Notice
 from dustbunny.paths import normalize
@@ -88,6 +89,7 @@ def _candidate(
         real_path=real_path if real_path != path else None,
         is_symlink=is_symlink,
         is_mountpoint=not is_symlink and entry_stat.st_dev != root_dev,
+        created=birth_time(path),
     )
     if is_symlink:
         candidate.last_modified = _ts(entry_stat.st_mtime)

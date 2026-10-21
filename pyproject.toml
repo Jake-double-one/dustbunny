@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dustbunny"
-version = "0.1.0"
+version = "0.2.0"
 description = "Finds orphaned Docker appdata folders that no container, stack or compose file references anymore."
 readme = "README.md"
 license = "MIT"
