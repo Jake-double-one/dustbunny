@@ -132,6 +132,32 @@ def test_missing_root_does_not_resolve_orphans(tmp_path: Path) -> None:
     assert sent == ["Dustbunny: 1 orphaned folder found"]
 
 
+def test_root_that_stays_empty_resolves_its_orphans(tmp_path: Path) -> None:
+    sent: list[str] = []
+    root, svc = service(tmp_path, [_Refs([])], sent)
+    (root / "a").mkdir(parents=True)
+    svc.scan()
+    (root / "a").rmdir()  # really deleted
+    svc.scan()
+    svc.scan()
+    assert len(sent) == 1  # two empty scans: could still be an unmounted share
+    svc.scan()
+    assert sent[-1] == "Dustbunny: 1 folder is no longer orphaned"
+
+
+def test_default_with_missing_folder_stays_reliable() -> None:
+    from dustbunny.compose_parser import parse_compose
+
+    parsed = parse_compose("services:\n  a:\n    volumes:\n      - ${D:-/opt/appdata}/gone:/c\n")
+    report = build_report(
+        [Candidate(path=f"{ROOT}/x", root=ROOT, name="x")],
+        parsed.references,
+        roots=[ROOT],
+        sources=[SourceStatus(name="compose")],
+    )
+    assert report.reliable
+
+
 def test_ignore_works_after_restart(tmp_path: Path) -> None:
     root, svc = service(tmp_path, [_Refs([])], [])
     (root / "a").mkdir(parents=True)

@@ -47,6 +47,11 @@ class Reference(BaseModel):
         default=None,
         description="Set when parts of the path could not be resolved; '*' marks unknown parts.",
     )
+    alternative: bool = Field(
+        default=False,
+        description="Only exists if a variable with a default is set somewhere else; "
+        "protects folders, but its absence is no reason for a warning.",
+    )
 
     @property
     def is_pattern(self) -> bool:

@@ -183,7 +183,8 @@ Schlüssel und `{Platzhalter}` vorhanden sind. Die Begriffe erklärt [`docs/glos
 
 ## API und Kommandozeile
 
-`GET /api/report` liefert den letzten Bericht als JSON, `POST /api/scan` startet einen Scan,
+`GET /api/report` liefert den letzten Bericht als JSON, `POST /api/scan` startet einen Scan
+(POST nur mit JSON: `curl -X POST -H 'Content-Type: application/json' -d '{}' http://host:8077/api/scan`),
 `GET /healthz` ist der Gesundheitscheck. `dustbunny --once --json` macht einen einzelnen Scan ohne Webserver.
 Details in der [englischen README](README.md#api-and-command-line).
 

@@ -302,9 +302,9 @@ async function refresh() {
   } catch {
     state.error = true;
   }
-  // redraw only when something changed: a redraw would close menus and reset focus
+  // while scanning, redraw only on changes; otherwise once a minute, so "3 minutes ago" stays true
   const now = JSON.stringify([state.status, state.report?.generated_at, state.error]);
-  if (now !== shown) { shown = now; render(); }
+  if (now !== shown || !scanning()) { shown = now; render(); }
   if (wasScanning && !scanning() && state.report) announce(t('hero.lastScan', { time: clock(state.report.generated_at) }));
   clearTimeout(polling);
   polling = setTimeout(refresh, scanning() ? 2000 : 60000);

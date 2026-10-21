@@ -222,6 +222,9 @@ menu automatically. `pytest` checks that the file has every key and the same `{p
 | `GET /api/status` | Scan state, last and next scan, configuration problems |
 | `POST /api/scan` | Start a scan |
 | `POST /api/ignore` | `{"path": "/opt/appdata/x", "ignored": true}` |
+
+POST requests must send JSON (`Content-Type: application/json`), so other web pages can't trigger them:
+`curl -X POST -H 'Content-Type: application/json' -d '{}' http://host:8077/api/scan`.
 | `GET /healthz` | Health check (no password needed) |
 
 Reasons and warnings come with a `code`, `params` and an English `message`.
