@@ -49,7 +49,7 @@ def test_portainer_stacks(fixtures: Path) -> None:
     # unknown variable -> pattern, relative path -> skipped with a warning
     assert any(r.glob == "*/paperless" for r in result.references)
     codes = [w.code for w in result.warnings]
-    assert "compose-relative-path" in codes
+    assert "compose-relative-path" not in codes  # ./relative points into Portainer's data
     assert "portainer-additional-files" in codes
     assert seen[0].headers["X-API-Key"] == "ptr_key"
     assert str(seen[0].url) == "https://portainer.example:9443/api/stacks"

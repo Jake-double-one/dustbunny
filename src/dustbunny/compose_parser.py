@@ -86,12 +86,14 @@ def parse_compose(
     owner: str | None = None,
     origin: str | None = None,
     state: RefState = RefState.DEFINED,
+    warn_relative: bool = True,
 ) -> ParseResult:
     """Parse compose ``text`` and return every host path it references.
 
     ``base_dir`` is the host directory relative paths are resolved against.
-    Pass ``None`` when it isn't meaningful (e.g. Portainer stores stack files
-    in its own ``/data/compose``); relative paths are then skipped.
+    Without it, relative paths are skipped - with a warning, unless
+    ``warn_relative`` is off because they can't matter (Portainer: they point
+    into Portainer's own data folder, never into a scan root).
     """
     env = env or {}
     ctx = _Context(
@@ -100,6 +102,7 @@ def parse_compose(
         owner=owner,
         origin=origin,
         state=state,
+        warn_relative=warn_relative,
     )
 
     try:
@@ -197,6 +200,7 @@ class _Context:
     origin: str | None
     state: RefState
     project: str | None = None
+    warn_relative: bool = True
     alternative: bool = False  # adding references of the "variable set elsewhere" pass
     references: list[Reference] = field(default_factory=list)
     warnings: list[Notice] = field(default_factory=list)
@@ -240,7 +244,8 @@ class _Context:
         if value.startswith(("/", MARK_START)):
             return value
         if self.base_dir is None:
-            self.warn("compose-relative-path", path=display(value), detail=what)
+            if self.warn_relative:
+                self.warn("compose-relative-path", path=display(value), detail=what)
             return None
         return posixpath.join(self.base_dir, value)
 
