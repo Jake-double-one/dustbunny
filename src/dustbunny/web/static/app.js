@@ -158,6 +158,8 @@ function lede(r) {
     text = orphans ? t('hero.text', { count: orphans, roots: r.roots.join(', ') }) : t('hero.clean');
     text += ' ' + t('hero.lastScan', { time: clock(r.generated_at) });
   }
+  const next = state.status?.next_scan_at;
+  if (next && !DEMO && !scanning()) text += ' ' + t('hero.nextScan', { time: clock(next) });
   const button = h('button', {
     class: 'chip chip-main', type: 'button', id: 'scan',
     disabled: scanning() || !!state.status?.config_error,

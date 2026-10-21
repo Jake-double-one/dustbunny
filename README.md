@@ -139,6 +139,8 @@ All settings are environment variables.
 | `IGNORE` | | Folders to skip: names or paths, globs allowed, comma-separated (`backup-*,/opt/appdata/keep`) |
 | `PATH_ALIASES` | | `HOST=LOCAL` path translations, comma-separated |
 | `SCAN_INTERVAL` | `6h` | `30m`, `6h`, `1d` … `0` = no scheduled scans (one at start, then on *Scan now*). After an incomplete scan, the next one comes after 2 minutes. |
+| `SCAN_SCHEDULE` | | Cron expression instead of `SCAN_INTERVAL`, e.g. `0 3 * * *` (every night at 3:00), `0 3 * * sun`, `0 */4 * * *`, `@daily`. Then there is no scan at start, unless there is no result yet. The next scan is shown on the page. |
+| `TZ` | `UTC` | Time zone of `SCAN_SCHEDULE`, e.g. `Europe/Berlin` |
 | `SCAN_SIZES` | `true` | Calculate size and last change (reads every file's metadata) |
 | `DOCKER_ENABLED` | `true` | Ask the Docker API |
 | `DOCKER_HOST` | local socket | e.g. `tcp://socket-proxy:2375` |

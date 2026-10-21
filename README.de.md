@@ -141,6 +141,8 @@ Alle Einstellungen sind Umgebungsvariablen. Die vollständige Tabelle mit allen 
 | `IGNORE` | Zu überspringende Ordner: Namen oder Pfade, Globs erlaubt (`backup-*,/opt/appdata/behalten`) |
 | `PATH_ALIASES` | Pfad-Übersetzungen `HOST=LOKAL`, kommagetrennt |
 | `SCAN_INTERVAL` | `30m`, `6h` (Standard), `1d` … `0` = keine geplanten Scans (einer beim Start, dann auf Knopfdruck) |
+| `SCAN_SCHEDULE` | Cron-Ausdruck statt `SCAN_INTERVAL`, z. B. `0 3 * * *` (jede Nacht um 3:00), `0 3 * * sun`, `0 */4 * * *`, `@daily`. Dann kein Scan beim Start, außer es gibt noch kein Ergebnis. Der nächste Scan steht auf der Seite. |
+| `TZ` | Zeitzone für `SCAN_SCHEDULE`, z. B. `Europe/Berlin` (Standard: UTC) |
 | `PORTAINER_URL`, `PORTAINER_API_KEY` | Portainer-Adresse und Zugriffstoken (*My account → Access tokens*) |
 | `PORTAINER_ENDPOINT_ID` | Nur Stacks dieser Umgebung (die Zahl in ihrer Portainer-Adresse) |
 | `PORTAINER_INSECURE` | `true` bei selbstsigniertem Zertifikat |
