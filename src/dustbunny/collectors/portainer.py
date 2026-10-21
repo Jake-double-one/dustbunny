@@ -70,7 +70,11 @@ class PortainerCollector:
         parsed = parse_compose(
             content,
             env=env,
-            base_dir=None,  # relative paths point into Portainer's own /data/compose
+            # Relative paths (also Portainer's own "env_file: stack.env") point into
+            # Portainer's data folder (/data/compose/<id>), never into a scan root:
+            # skipped without a warning.
+            base_dir=None,
+            warn_relative=False,
             source=self.name,
             owner=name,
             origin=f"Portainer stack {name}",
