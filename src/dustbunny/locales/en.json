@@ -36,6 +36,7 @@
   "hero.unitFolders_other": "folders",
   "hero.clean": "No dust bunnies: nothing is orphaned. 🐇",
   "hero.lastScan": "Last scan {time}.",
+  "hero.nextScan": "Next scan {time}.",
   "hero.noScan": "No scan yet.",
 
   "time.today": "today {time}",

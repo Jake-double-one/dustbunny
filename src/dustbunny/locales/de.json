@@ -36,6 +36,7 @@
   "hero.unitFolders_other": "Ordner",
   "hero.clean": "Keine Staubmäuse: Nichts ist verwaist. 🐇",
   "hero.lastScan": "Letzter Scan {time}.",
+  "hero.nextScan": "Nächster Scan {time}.",
   "hero.noScan": "Noch kein Scan.",
 
   "time.today": "heute {time}",

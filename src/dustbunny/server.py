@@ -11,7 +11,7 @@ import re
 import secrets
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, tzinfo
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -24,6 +24,7 @@ from dustbunny import __version__
 from dustbunny.config import Settings
 from dustbunny.i18n import LOCALES_DIR, available_languages, load_locale
 from dustbunny.mcp_server import McpServer, origin_allowed, token_matches
+from dustbunny.schedule import Cron
 from dustbunny.service import ScanService
 from dustbunny.skins import SkinCache
 from dustbunny.state import State
@@ -66,12 +67,21 @@ MAX_RETRIES = 2
 
 
 class Scheduler:
-    """Runs a scan at start and then every ``interval`` (0 = only on request).
-    ``trigger`` must be called from the event loop (async endpoints)."""
+    """Runs a scan at start and then every ``interval`` (0 = only on request) or,
+    with ``cron``, at its times in ``tz`` - then at start only if there is no report
+    yet. ``trigger`` must be called from the event loop (async endpoints)."""
 
-    def __init__(self, service: ScanService, interval: timedelta):
+    def __init__(
+        self,
+        service: ScanService,
+        interval: timedelta,
+        cron: Cron | None = None,
+        tz: tzinfo = UTC,
+    ):
         self.service = service
         self.interval = interval
+        self.cron = cron
+        self.tz = tz
         self.next_scan_at: datetime | None = None
         self.pending = False  # a scan was requested and hasn't finished yet
         self.retries = 0
@@ -79,6 +89,12 @@ class Scheduler:
         self._task: asyncio.Task[None] | None = None
 
     def start(self) -> None:
+        if self.cron is not None:
+            log.info("scans at %r (%s)", self.cron.expression, self.tz)
+        elif self.interval.total_seconds() > 0:
+            log.info("scans at start and every %s", self.interval)
+        else:
+            log.info("scans at start and on request only")
         self._task = asyncio.create_task(self._run())
 
     async def stop(self) -> None:
@@ -91,27 +107,38 @@ class Scheduler:
         self.pending = True
         self._wake.set()
 
+    def next_after(self, now: datetime) -> datetime | None:
+        """When the schedule wants the next scan (None: only on request)."""
+        if self.cron is not None:
+            return self.cron.next_after(now.astimezone(self.tz))
+        if self.interval.total_seconds() > 0:
+            return now + self.interval
+        return None
+
     async def _run(self) -> None:
+        scan = self.cron is None or self.service.report is None
         while True:
             self._wake.clear()
-            if self.service.ready:
+            if scan and self.service.ready:
                 with suppress(Exception):  # logged by the service, the loop goes on
                     await asyncio.to_thread(self.service.scan)
+            scan = True
             self.pending = self._wake.is_set()
-            interval = self.interval
+            now = datetime.now(UTC)
+            next_at = self.next_after(now)
             report = self.service.report
             failed = self.service.last_error is not None or (report and not report.complete)
             if not failed:
                 self.retries = 0
-            elif interval.total_seconds() > 0 and self.retries < MAX_RETRIES:
+            elif next_at is not None and self.retries < MAX_RETRIES:
                 self.retries += 1
-                interval = min(interval, RETRY_INCOMPLETE)
-            seconds = interval.total_seconds()
-            self.next_scan_at = (
-                datetime.now(UTC) + interval if seconds > 0 and self.service.ready else None
-            )
+                next_at = min(next_at, now + RETRY_INCOMPLETE)
+            self.next_scan_at = next_at if self.service.ready else None
+            timeout = None
+            if self.next_scan_at is not None:
+                timeout = max((self.next_scan_at - datetime.now(UTC)).total_seconds(), 0)
             with suppress(TimeoutError):
-                await asyncio.wait_for(self._wake.wait(), timeout=seconds if seconds > 0 else None)
+                await asyncio.wait_for(self._wake.wait(), timeout=timeout)
 
 
 def create_app(settings: Settings, service: ScanService | None = None) -> FastAPI:
@@ -121,7 +148,9 @@ def create_app(settings: Settings, service: ScanService | None = None) -> FastAP
         log.error("configuration error: %s", service.config_error)
     skins = SkinCache(custom_dir=settings.custom_skins_dir)
     skins.get()  # read once at start: problems show up in the log right away
-    scheduler = Scheduler(service, settings.scan_interval)
+    scheduler = Scheduler(
+        service, settings.scan_interval, cron=settings.cron, tz=settings.time_zone
+    )
     # CSS and JS under a path with the version in it: after an update, no browser
     # combines the new page with files it cached from the old version
     assets = "static/" + re.sub(r"[^A-Za-z0-9.-]", "-", __version__)
@@ -184,6 +213,8 @@ def create_app(settings: Settings, service: ScanService | None = None) -> FastAP
             "last_scan_at": service.last_scan_at,
             "next_scan_at": scheduler.next_scan_at,
             "scan_interval_seconds": int(settings.scan_interval.total_seconds()),
+            "scan_schedule": settings.scan_schedule,
+            "time_zone": str(settings.time_zone),
             "roots": service.roots,
             "config_error": service.config_error,
             "last_error": service.last_error,

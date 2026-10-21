@@ -18,7 +18,11 @@ services:
       SCAN_ROOTS: "/opt/appdata"           # ←
       # Docker API through the read-only socket proxy below
       DOCKER_HOST: "tcp://socket-proxy:2375"
+      # When to scan: every SCAN_INTERVAL, or at the times of SCAN_SCHEDULE (cron, e.g. "0 3 * * *"
+      # = every night at 3:00 in the time zone TZ)
       SCAN_INTERVAL: "6h"
+      SCAN_SCHEDULE: ""
+      TZ: "Europe/Berlin"                  # ←
       # Folders to skip: names or paths, globs allowed, comma-separated (e.g. "backup-*,/opt/appdata/keep")
       IGNORE: ""
       # Portainer: also counts stacks that are stopped (their containers are gone, the data is not).

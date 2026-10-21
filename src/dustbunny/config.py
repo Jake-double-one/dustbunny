@@ -6,9 +6,12 @@ import re
 from datetime import timedelta
 from pathlib import Path
 from typing import Annotated, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+from dustbunny.schedule import Cron
 
 CommaList = Annotated[list[str], NoDecode]
 MIN_MCP_TOKEN = 24
@@ -46,6 +49,8 @@ class Settings(BaseSettings):
     ignore: CommaList = Field(default_factory=list)
     path_aliases: CommaList = Field(default_factory=list)
     scan_interval: timedelta = timedelta(hours=6)
+    scan_schedule: str | None = None  # cron expression, replaces SCAN_INTERVAL
+    tz: str | None = None  # time zone of SCAN_SCHEDULE, e.g. Europe/Berlin
     scan_sizes: bool = True
 
     # reference sources
@@ -95,12 +100,33 @@ class Settings(BaseSettings):
         "auth_password",
         "mcp_token",
         "skins_dir",
+        "scan_schedule",
+        "tz",
         mode="before",
     )
     @classmethod
     def _empty_is_none(cls, value: object) -> object:
         # docker-compose files often carry `VAR: ""` for unused options
         return None if isinstance(value, str) and not value.strip() else value
+
+    @field_validator("scan_schedule")
+    @classmethod
+    def _cron(cls, value: str | None) -> str | None:
+        if value is not None:
+            Cron(value)  # raises with a message saying what is wrong
+        return value
+
+    @field_validator("tz")
+    @classmethod
+    def _time_zone(cls, value: str | None) -> str | None:
+        if value is not None:
+            try:
+                ZoneInfo(value.strip())
+            except (ZoneInfoNotFoundError, ValueError):
+                msg = f"unknown time zone TZ={value!r}, use e.g. Europe/Berlin"
+                raise ValueError(msg) from None
+            return value.strip()
+        return value
 
     @field_validator("log_level", "notify_on", mode="before")
     @classmethod
@@ -123,6 +149,14 @@ class Settings(BaseSettings):
                     "'/', e.g. from `openssl rand -hex 24`"
                 )
         return self
+
+    @property
+    def cron(self) -> Cron | None:
+        return Cron(self.scan_schedule) if self.scan_schedule else None
+
+    @property
+    def time_zone(self) -> ZoneInfo:
+        return ZoneInfo(self.tz or "UTC")
 
     @property
     def portainer_enabled(self) -> bool:
