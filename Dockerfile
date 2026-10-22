@@ -6,7 +6,9 @@ FROM python:3.12-slim AS build
 WORKDIR /src
 COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
-RUN pip install --no-cache-dir --root-user-action=ignore --prefix=/install .
+# the image's own pip is as old as its Python (3.12 only gets security fixes): build with the newest
+RUN pip install --no-cache-dir --root-user-action=ignore --upgrade pip \
+ && pip install --no-cache-dir --root-user-action=ignore --prefix=/install .
 
 # ---- runtime ----
 FROM python:3.12-slim
@@ -25,6 +27,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DATA_DIR=/data \
     PORT=8080
 COPY --from=build /install /usr/local
+# Nothing in the running image installs packages: drop pip (and the wheel ensurepip keeps of it),
+# so an old pip can't show up in vulnerability scans.
+RUN python -m pip uninstall -y pip && rm -rf /usr/local/lib/python3.12/ensurepip
 # uid 1000 is the usual first user on a host (and PUID of most linuxserver.io images),
 # so folders of such containers are readable. See README "Folder sizes" for full access.
 # The user's group is 0 and /data is group-writable (setgid): the docker-compose.yml runs
