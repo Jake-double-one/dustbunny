@@ -38,6 +38,7 @@ why it thinks so, how big they are and since when they are orphaned.
 - [AI agents (MCP)](#ai-agents-mcp)
 - [API and command line](#api-and-command-line)
 - [Development](#development)
+- [Updates and security](#updates-and-security)
 - [Roadmap](#roadmap)
 
 ## Features
@@ -323,6 +324,19 @@ src/dustbunny/
   web/             the web UI (no build step)
 docs/              design, glossary, screenshots
 ```
+
+## Updates and security
+
+- **Dependencies:** Dependabot opens a pull request every week for new versions of the Python packages, the
+  GitHub Actions and the base image. Every merge rebuilds the image, so transitive packages (e.g. `certifi`)
+  are refreshed as well.
+- **Audit:** the [Audit workflow](https://github.com/Jake-double-one/dustbunny/actions/workflows/audit.yml)
+  checks every Monday, on every change to the dependencies and on request whether what the image ships has
+  known vulnerabilities: [pip-audit](https://github.com/pypa/pip-audit) for the Python packages and
+  [Trivy](https://trivy.dev) for the whole image including its Debian packages. It fails on high and critical
+  findings that already have a fix; the image findings also appear under *Security → Code scanning*.
+- **Image:** runs as an unprivileged user, contains no pip, and reads the Docker API through a read-only
+  socket proxy (see `docker-compose.yml`).
 
 ## Roadmap
 
