@@ -38,6 +38,7 @@ nichts mehr verwendet, warum, wie groß sie sind und seit wann sie verwaist sind
 - [KI-Agents (MCP)](#ki-agents-mcp)
 - [API und Kommandozeile](#api-und-kommandozeile)
 - [Entwicklung](#entwicklung)
+- [Updates und Sicherheit](#updates-und-sicherheit)
 
 ## Funktionen
 
@@ -255,6 +256,20 @@ Details in der [englischen README](README.md#api-and-command-line).
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 .venv/bin/ruff check . && .venv/bin/ruff format --check . && .venv/bin/pytest
 ```
+
+## Updates und Sicherheit
+
+- **Abhängigkeiten:** Dependabot stellt jede Woche einen Pull Request für neue Versionen der Python-Pakete, der
+  GitHub Actions und des Basis-Images. Jeder Merge baut das Image neu, dabei werden auch indirekte Pakete
+  (z. B. `certifi`) aufgefrischt.
+- **Audit:** Der [Audit-Workflow](https://github.com/Jake-double-one/dustbunny/actions/workflows/audit.yml)
+  prüft jeden Montag, bei jeder Änderung an den Abhängigkeiten und auf Wunsch, ob das, was im Image steckt,
+  bekannte Schwachstellen hat: [pip-audit](https://github.com/pypa/pip-audit) für die Python-Pakete und
+  [Trivy](https://trivy.dev) für das ganze Image samt Debian-Paketen. Er schlägt bei hohen und kritischen
+  Funden fehl, für die es schon einen Fix gibt; die Image-Funde erscheinen außerdem unter *Security → Code
+  scanning*.
+- **Image:** läuft als unprivilegierter Benutzer, enthält kein pip und liest die Docker-API über einen
+  Socket-Proxy nur lesend (siehe `docker-compose.yml`).
 
 ## Lizenz
 
