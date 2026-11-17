@@ -2,7 +2,7 @@
 
 # ---- build: install Dustbunny and its dependencies into /install ----
 # Everything is pure Python or ships wheels, so no compiler is needed on any platform.
-FROM python:3.12-slim AS build
+FROM python:3.15-slim AS build
 WORKDIR /src
 COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
@@ -11,7 +11,7 @@ RUN pip install --no-cache-dir --root-user-action=ignore --upgrade pip \
  && pip install --no-cache-dir --root-user-action=ignore --prefix=/install .
 
 # ---- runtime ----
-FROM python:3.12-slim
+FROM python:3.15-slim
 ARG APP_VERSION=
 ARG GIT_SHA=
 LABEL org.opencontainers.image.title="Dustbunny" \
