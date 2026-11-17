@@ -6,7 +6,7 @@ FROM python:3.15-slim AS build
 WORKDIR /src
 COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
-# the image's own pip is as old as its Python (3.12 only gets security fixes): build with the newest
+# build with the newest pip, whatever the base image ships
 RUN pip install --no-cache-dir --root-user-action=ignore --upgrade pip \
  && pip install --no-cache-dir --root-user-action=ignore --prefix=/install .
 
@@ -26,10 +26,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DUSTBUNNY_COMMIT=$GIT_SHA \
     DATA_DIR=/data \
     PORT=8080
+# Debian security fixes published after the base image was built (zlib, for one). The image is
+# rebuilt with every merge, Dependabot's weekly updates included, so it never falls far behind.
+RUN apt-get update \
+ && apt-get upgrade -y --no-install-recommends \
+ && rm -rf /var/lib/apt/lists/*
 COPY --from=build /install /usr/local
 # Nothing in the running image installs packages: drop pip (and the wheel ensurepip keeps of it),
 # so an old pip can't show up in vulnerability scans.
-RUN python -m pip uninstall -y pip && rm -rf /usr/local/lib/python3.12/ensurepip
+RUN python -m pip uninstall -y pip && rm -rf /usr/local/lib/python3*/ensurepip
 # uid 1000 is the usual first user on a host (and PUID of most linuxserver.io images),
 # so folders of such containers are readable. See README "Folder sizes" for full access.
 # The user's group is 0 and /data is group-writable (setgid): the docker-compose.yml runs
